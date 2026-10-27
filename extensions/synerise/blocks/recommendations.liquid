@@ -35,7 +35,7 @@
 {%- if campaign_id == blank -%}
   {%- if request.design_mode -%}
     <p style="padding:1rem;border:1px dashed #999;color:#666;text-align:center;">
-      Synerise Recommendations: set a Campaign ID in this block. The tracker key and API host come from the Synerise tracking code on the page.
+      Synerise Recommendations: set a Campaign ID in the settings. The tracker key and API host come from the Synerise tracking code on the page.
     </p>
   {%- endif -%}
 {%- else -%}
@@ -114,7 +114,7 @@
     {%- comment -%} ==== SNR PRESENTATION — change freely ==== {%- endcomment -%}
     <h2 class="snr-recommendations__title">{{ block.settings.title }}</h2>
     {%- comment -%} ==== SNR INTEGRATION PLUMBING — do not change ==== {%- endcomment -%}
-    {%- comment -%} Add classes to the ul/li freely; keep snr-recommendations__slot and the slot count (= limit) — the runtime fills these. {%- endcomment -%}
+    {%- comment -%} Keep this markup: the runtime fills the .snr-recommendations__slot items (count = limit). Style the grid and cards from the <style> block above or your theme CSS; card markup is buildCard() in snr-utils.js. {%- endcomment -%}
     <ul class="snr-recommendations__grid">
       {%- for i in (1..block.settings.limit) -%}
         <li class="snr-recommendations__slot snr-recommendations__slot--skeleton"></li>

@@ -105,15 +105,22 @@ is absent.
 
 The mirrored file is an **app block**. Your copy is a **theme section**. Make exactly these edits:
 
-1. `block.settings.*` → `section.settings.*` (every occurrence; **keep the setting ids** —
-   `campaign_id` and the `attr_*` mapping are read by the runtime).
+1. `block.settings.*` → `section.settings.*` (every occurrence; **keep the setting ids and
+   types** — `campaign_id` and the `attr_*` mapping are read by the runtime. Labels, `info`,
+   defaults and extra settings may change.)
 2. In `{% schema %}`: remove `"target"` (and `"templates"` if present), add
    `"presets": [{ "name": "Synerise Recommendations" }]` so the section can be added from the theme editor.
 3. Runtime + styles — pick one:
-   - **Copy into your theme (default, full customization):** upload `snr-utils.js`,
-     `recommendations.js` and the CSS from the mirror to your theme's `assets/`. The
-     `{{ 'x.js' | asset_url }}` tags then work unchanged, and you may edit the runtime's
-     PRESENTATION zone (card markup in `snr-utils.js` → `buildCard()`).
+   - **Copy into your theme (default, full customization):** upload these files, unchanged,
+     to your theme's `assets/` (Online Store → Themes → Edit code → Assets → Add a new asset):
+     - `https://raw.githubusercontent.com/Synerise/shopify-storefront-components/main/extensions/synerise/assets/snr-utils.js`
+     - `https://raw.githubusercontent.com/Synerise/shopify-storefront-components/main/extensions/synerise/assets/recommendations.js`
+     - `https://raw.githubusercontent.com/Synerise/shopify-storefront-components/main/extensions/synerise/assets/snr-cards.css`
+
+     The `{{ 'x.js' | asset_url }}` tags then work unchanged. **The product card markup is not
+     in the Liquid — it is `buildCard()` in `snr-utils.js`** (its PRESENTATION zone). Anything
+     about the card itself (a badge, a second price, a rating) is a change to your copy of
+     that file; this is why copy-into-theme is the default route.
    - **Load from the mirror (restyle only, auto-updating):** replace each `asset_url`
      tag with the mirror's pinned URL (`https://cdn.jsdelivr.net/gh/Synerise/shopify-storefront-components@<tag>/extensions/synerise/assets/<file>`).
      The runtime is then read-only; customize the Liquid, `<style>`, schema and `attr_*` mapping.
@@ -140,7 +147,9 @@ such as Sidekick can fetch public HTTPS URLs):
 > the four adaptations (copy the runtime into my theme), customize the PRESENTATION
 > zones, and keep every `SNR INTEGRATION PLUMBING` zone unchanged.
 
-The assistant fetches the real template + runtime from the mirror — nothing to paste.
+The assistant fetches the real template + runtime from the mirror and hands you the
+files to install (a section + three assets). **Use the Sidekick chat, not the theme
+editor's "Generate block"** — see [Working with Sidekick](README.md#working-with-sidekick-and-other-ai-assistants).
 
 ## Install without AI (deterministic)
 

@@ -59,10 +59,48 @@ Same source, two ways:
   > PRESENTATION zones to `<your change>`. Keep every `SNR INTEGRATION PLUMBING`
   > zone unchanged.
 
+  Ask for the **files** (the section + the runtime assets) and install them yourself —
+  see *Working with Sidekick* below for what the assistant can and cannot do.
+
 - **By hand** — copy the component's **app-block template** from the mirror into a
   new theme section (Online Store → Themes → Edit code → Sections → add a section),
   apply the **four adaptations** listed in the component's contract (settings
   object, schema preset, runtime assets, nothing else), and set the campaign/index id.
+
+## Working with Sidekick (and other AI assistants)
+
+Verified on a Horizon theme, October 2026. Two different Shopify features look alike
+but behave very differently:
+
+| | **Sidekick chat** (the panel in the admin / theme editor) | **"Generate block"** (theme editor → Add block → AI) |
+|---|---|---|
+| Reads our public URLs (template, contract, runtime) | **Yes** | No — it only sees the text you type |
+| Can write files into your theme | **No** — it hands you files to download | Yes, but only **one standalone theme block** in `blocks/` |
+| Can create a section or upload assets | No | No |
+| Result for our components | The correct section + assets, ready to install | A look-alike stub with **no runtime** — nothing loads |
+
+**The flow that works**
+
+1. In the Sidekick chat, paste the prompt from the component's contract (with your
+   campaign / index id and your presentation changes).
+2. If Sidekick offers to "generate this theme block", **decline** and ask instead:
+   *"Give me the complete section file and the asset files to download."*
+3. Download the files (one `.liquid` for `sections/`, two or three for `assets/`).
+4. **Online Store → Themes → Edit code**: *Assets → Add a new asset* for each runtime /
+   CSS file (keep the filenames), then *Sections → Add a new section*, paste the
+   `.liquid`, save.
+5. Theme editor → *Add section* → pick the component, set the id if not pre-filled.
+
+After that the code is yours: edit `buildCard()` in your copy of `snr-utils.js`, the
+`<style>` block or the schema at any time; the PRESENTATION / PLUMBING markers show you
+where. `snr-utils.js` is shared by Recommendations and Search — scope card changes to
+one component's root class (e.g. `.snr-recommendations .snr-card__badge`) if you use both.
+
+**Why "Generate block" cannot do this.** It creates a single self-contained theme block
+from your description alone; it never receives fetched content and cannot touch
+`sections/` or `assets/`. Our components need the runtime files, so the generated block
+renders an empty frame. If you tried it, delete the generated block
+(`blocks/ai_gen_*.liquid`) from the theme.
 
 ## The two zones (how customization stays safe)
 
