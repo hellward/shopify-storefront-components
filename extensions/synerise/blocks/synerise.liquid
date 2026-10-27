@@ -1,0 +1,53 @@
+{%- liquid
+  assign tracking_code = block.settings.tracking_code | strip
+-%}
+
+{%- if tracking_code != blank %}
+<script>
+  // Shared with other Synerise components on the page. No PII: product and
+  // collection are null off their pages.
+  window.__snrs = {
+    context: {
+      pageType: {{ request.page_type | json }},
+      product: {% if product and product != empty %}{
+        id: {{ product.id | json }},
+        handle: {{ product.handle | json }},
+        title: {{ product.title | json }},
+        vendor: {{ product.vendor | json }},
+        type: {{ product.type | json }}
+      }{% else %}null{% endif %},
+      collection: {% if collection and collection != empty %}{
+        id: {{ collection.id | json }},
+        handle: {{ collection.handle | json }},
+        title: {{ collection.title | json }}
+      }{% else %}null{% endif %}
+    }
+  };
+</script>
+{% if tracking_code contains '<script' -%}
+{{ tracking_code }}
+{%- else -%}
+<script>
+{{ tracking_code }}
+</script>
+{%- endif %}
+{%- endif %}
+
+{% schema %}
+{
+  "name": "Synerise",
+  "target": "body",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Tracking code",
+      "info": "Paste the whole tracking code from Synerise: Settings > Tracking codes, with or without the script tags. It is added to every page. [Learn more](https://hub.synerise.com/docs/settings/tool/tracking_codes/)"
+    },
+    {
+      "type": "liquid",
+      "id": "tracking_code",
+      "label": "JavaScript"
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,98 @@
+/* ==== SNR PRESENTATION — change freely ==== */
+/* Synerise Search Results — storefront styles for the search app block.
+ *
+ * Merchant customization:
+ *   The look is driven by the CSS variables on .snr-search-page below. Override
+ *   them from your theme's Custom CSS (low specificity, no !important needed):
+ *     .snr-search-page { --snr-accent: #c0392b; --snr-radius: 8px; }
+ *   For full control, override any class outright. Defaults are theme-adaptive
+ *   (currentColor / inherited font), so the block blends into any theme as-is.
+ */
+
+.snr-search-page {
+  --snr-accent: currentColor;            /* links, clear actions, checkbox, Apply border */
+  --snr-muted: rgba(120, 120, 120, 1);   /* facet counts, empty-state text */
+  --snr-radius: 4px;                     /* inputs, buttons, card image */
+  --snr-gap: 1.5rem;                     /* sidebar <-> results gap */
+  /* --snr-cols is set per block from the theme-editor "Grid columns" setting */
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+/* ---- Header + sort ---- */
+.snr-search-page__header { margin-bottom: var(--snr-gap); }
+.snr-search-page__sort-label { margin-right: 0.5rem; }
+
+/* ---- Layout: facet sidebar + results ---- */
+.snr-search-page__layout { display: flex; gap: var(--snr-gap); align-items: flex-start; }
+.snr-search-page__facets { flex: 0 0 240px; }
+.snr-search-page__main { flex: 1 1 auto; min-width: 0; }
+
+@media (max-width: 749px) {
+  .snr-search-page__layout { flex-direction: column; }
+  .snr-search-page__facets { flex: 1 1 auto; width: 100%; }
+}
+
+/* ---- Facets ---- */
+.snr-facet { margin-bottom: 1rem; }
+.snr-facet__title { font-size: 1rem; margin: 1rem 0 0.5rem; }
+.snr-facet__list { list-style: none; padding: 0; margin: 0; }
+.snr-facet__item { margin: 0.25rem 0; }
+.snr-facet__label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+.snr-facet__label input[type="checkbox"] { accent-color: var(--snr-accent); }
+.snr-facet__value { flex: 1 1 auto; }
+.snr-facet__count { color: var(--snr-muted); }
+.snr-facet__more { cursor: pointer; color: var(--snr-accent); text-decoration: underline; }
+
+/* Clear actions (link-style buttons) */
+.snr-facet-clear-all,
+.snr-facet-clear {
+  cursor: pointer;
+  color: var(--snr-accent);
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+}
+.snr-facet-clear-all { display: inline-block; margin: 0 0 0.5rem; }
+.snr-facet-clear { font-size: 0.8rem; font-weight: normal; margin-left: 0.35rem; }
+
+/* Range facet: Min / Max + Apply */
+.snr-facet-range { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.snr-facet-range__min,
+.snr-facet-range__max { width: 5.5rem; border-radius: var(--snr-radius); }
+.snr-facet-range__apply,
+.snr-search-page__loadmore-btn {
+  padding: 0.4rem 0.9rem;
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  cursor: pointer;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--snr-accent);
+  border-radius: var(--snr-radius);
+}
+.snr-facet-range__apply:hover,
+.snr-search-page__loadmore-btn:hover { opacity: 0.7; }
+
+/* ---- Results grid ---- */
+.snr-search-page__grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(var(--snr-cols, 4), minmax(0, 1fr));
+}
+@media (max-width: 749px) {
+  .snr-search-page__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---- Load more ---- */
+.snr-search-page__loadmore { display: flex; justify-content: center; margin-top: var(--snr-gap); }
+
+/* ---- Empty / error state ---- */
+.snr-search-page__empty { text-align: center; padding: 3rem 1rem; color: var(--snr-muted); }

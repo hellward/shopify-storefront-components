@@ -1,0 +1,80 @@
+{%- comment -%}
+  App embed (target: body) — attaches Synerise AI Search autocomplete to the
+  theme's existing search input(s). Connection (tracker key, API host) comes
+  from window.__snrs.config (Synerise tracking code); the suggestion index and
+  options are set here. The widget hides itself when config or index is missing.
+{%- endcomment -%}
+{%- if block.settings.suggestion_index != blank -%}
+  {{ 'snr-suggestions.css' | asset_url | stylesheet_tag }}
+  {{ 'snr-cards.css' | asset_url | stylesheet_tag }}
+  <div data-snr-suggestions
+       hidden
+       data-index="{{ block.settings.suggestion_index | escape }}"
+       data-phrase-index="{{ block.settings.suggestion_phrase_index | escape }}"
+       data-selector="{{ block.settings.search_input_selector | escape }}"
+       data-min-chars="{{ block.settings.min_chars }}"
+       data-max-suggestions="{{ block.settings.max_suggestions }}"
+       data-max-products="{{ block.settings.max_products }}"
+       data-money-format="{{ shop.money_format | escape }}"
+       data-attr-handle="{{ block.settings.attr_handle | escape }}"
+       data-attr-title="{{ block.settings.attr_title | escape }}"
+       data-attr-image="{{ block.settings.attr_image | escape }}"
+       data-attr-price="{{ block.settings.attr_price | escape }}"
+       data-view-all-label="{{ block.settings.view_all_label | escape }}"
+       data-no-results-label="{{ block.settings.no_results_label | escape }}"
+       data-error-label="{{ block.settings.error_label | escape }}"
+       data-no-results-reco-label="{{ block.settings.no_results_reco_label | escape }}"
+       data-zero-state-label="{{ block.settings.zero_state_label | escape }}"
+       data-zero-state-campaign="{{ block.settings.zero_state_campaign | escape }}"
+       data-no-results-campaign="{{ block.settings.no_results_campaign | escape }}"></div>
+  <script src="{{ 'snr-utils.js' | asset_url }}" defer></script>
+  <script src="{{ 'snr-suggestions.js' | asset_url }}" defer></script>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Synerise Suggestions",
+  "target": "body",
+  "settings": [
+    { "type": "header", "content": "Synerise AI Search autocomplete",
+      "info": "Shows query suggestions and product results under your theme's search box as the shopper types. The tracker key and API host come from the Synerise tracking code on the page." },
+    { "type": "text", "id": "suggestion_index", "label": "Product search index (UUID)",
+      "info": "The Synerise AI Search index queried for product results. Required." },
+    { "type": "text", "id": "suggestion_phrase_index", "label": "Query suggestion index (UUID)",
+      "info": "Optional. A dedicated Synerise AI Search suggestion index that returns suggested search phrases (data[].suggestion). Leave blank to show product results only." },
+    { "type": "text", "id": "search_input_selector", "label": "Search input CSS selector",
+      "default": "form[action$=\"/search\"] input[name=\"q\"], form[action$=\"/search\"] input[type=\"search\"], input[type=\"search\"][name=\"q\"]",
+      "info": "CSS selector for your theme's search field(s). The default fits most themes; adjust if your theme uses a different search input. The theme's native predictive-search dropdown is hidden automatically while this block is active." },
+    { "type": "range", "id": "min_chars", "label": "Minimum characters", "min": 1, "max": 5, "step": 1, "default": 3 },
+    { "type": "range", "id": "max_suggestions", "label": "Max query suggestions", "min": 0, "max": 10, "step": 1, "default": 6 },
+    { "type": "range", "id": "max_products", "label": "Max product results", "min": 0, "max": 12, "step": 1, "default": 6 },
+    { "type": "text", "id": "view_all_label", "label": "\"View all results\" link label",
+      "default": "View all results",
+      "info": "Shown at the bottom of the dropdown, links to the full search results page. Leave blank to hide it." },
+    { "type": "header", "content": "Zero state (empty search box)",
+      "info": "Shown when the shopper opens the search box before typing. The theme's native predictive-search is suppressed, so this is what fills the empty state." },
+    { "type": "text", "id": "zero_state_campaign", "label": "Zero-state recommendations campaign (UUID)",
+      "info": "Optional. A Synerise AI Recommendations campaign shown when the search box is empty. Leave blank to show nothing until the shopper types." },
+    { "type": "text", "id": "zero_state_label", "label": "Zero-state heading",
+      "info": "Optional heading shown above the zero-state recommendations (e.g. \"Recommended for you\"). Only appears when there are recommendations." },
+    { "type": "header", "content": "No results / error" },
+    { "type": "text", "id": "no_results_label", "label": "No results message",
+      "default": "No results found",
+      "info": "Shown when the search returns no products. Leave blank to close the dropdown instead." },
+    { "type": "text", "id": "error_label", "label": "Error message",
+      "default": "Couldn't load results",
+      "info": "Shown when the search request fails. Leave blank to close the dropdown instead." },
+    { "type": "text", "id": "no_results_campaign", "label": "No-results recommendations campaign (UUID)",
+      "info": "Optional. A Synerise AI Recommendations campaign shown under the no-results / error message when it returns products." },
+    { "type": "text", "id": "no_results_reco_label", "label": "No-results recommendations heading",
+      "default": "You might also like",
+      "info": "Optional heading shown above the no-results / error recommendations. Only appears when there are recommendations." },
+    { "type": "header", "content": "Result field mapping (advanced)",
+      "info": "Attribute names returned by your index, used to build product cards. Change only if your index uses non-standard names." },
+    { "type": "text", "id": "attr_handle", "label": "Handle attribute", "default": "handle" },
+    { "type": "text", "id": "attr_title",  "label": "Title attribute",  "default": "title" },
+    { "type": "text", "id": "attr_image",  "label": "Image attribute",  "default": "imageLink" },
+    { "type": "text", "id": "attr_price",  "label": "Price attribute",  "default": "price.value" }
+  ]
+}
+{% endschema %}

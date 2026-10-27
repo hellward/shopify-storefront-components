@@ -1,0 +1,128 @@
+{%- comment -%} ==== SNR PRESENTATION — change freely ==== {%- endcomment -%}
+{% schema %}
+{
+  "name": "Synerise Recommendations",
+  "target": "section",
+  "templates": ["product", "collection", "cart", "index"],
+  "settings": [
+    { "type": "text",  "id": "campaign_id",     "label": "Campaign ID (UUID or slug)" },
+    { "type": "text",  "id": "title",           "label": "Heading", "default": "You may also like" },
+    { "type": "range", "id": "limit",           "label": "Number of products",
+      "min": 1, "max": 24, "step": 1, "default": 8 },
+    { "type": "range", "id": "columns_desktop", "label": "Columns (desktop)",
+      "min": 2, "max": 6, "step": 1, "default": 4 },
+    { "type": "range", "id": "columns_mobile",  "label": "Columns (mobile)",
+      "min": 1, "max": 3, "step": 1, "default": 2 },
+    { "type": "header", "content": "Result field mapping (advanced)",
+      "info": "Attribute names returned by the recommendations campaign, used to build product cards. Change only if your campaign returns non-standard names. Use dot paths for nested values (e.g. price.value)." },
+    { "type": "text",   "id": "attr_handle", "label": "Handle attribute", "default": "handle" },
+    { "type": "text",   "id": "attr_title",  "label": "Title attribute",  "default": "title" },
+    { "type": "text",   "id": "attr_image",  "label": "Image attribute",  "default": "imageLink" },
+    { "type": "text",   "id": "attr_price",  "label": "Price attribute",  "default": "price.value" }
+  ]
+}
+{% endschema %}
+
+{%- comment -%} ==== SNR INTEGRATION PLUMBING — do not change ==== {%- endcomment -%}
+{%- assign campaign_id = block.settings.campaign_id -%}
+
+{%- comment -%}
+  Tracker key and API host come from the Synerise tracking code on the page
+  (window.__snrs.config), resolved client-side by recommendations.js. Only the
+  per-block campaign id is known at render time; the block hides itself at
+  runtime if the shared config is missing.
+{%- endcomment -%}
+{%- if campaign_id == blank -%}
+  {%- if request.design_mode -%}
+    <p style="padding:1rem;border:1px dashed #999;color:#666;text-align:center;">
+      Synerise Recommendations: set a Campaign ID in this block. The tracker key and API host come from the Synerise tracking code on the page.
+    </p>
+  {%- endif -%}
+{%- else -%}
+  {{ 'snr-cards.css' | asset_url | stylesheet_tag }}
+
+  {%- case template -%}
+    {%- when 'product' -%}
+      {%- assign ctx_type = 'product' -%}
+      {%- assign ctx_id = product.id -%}
+      {%- assign ctx_cart_ids = blank -%}
+    {%- when 'collection' -%}
+      {%- assign ctx_type = 'collection' -%}
+      {%- assign ctx_id = collection.id -%}
+      {%- assign ctx_cart_ids = blank -%}
+    {%- when 'cart' -%}
+      {%- assign ctx_type = 'cart' -%}
+      {%- assign ctx_id = blank -%}
+      {%- capture ctx_cart_ids -%}[{%- for it in cart.items -%}{{ it.product_id }}{%- unless forloop.last -%},{%- endunless -%}{%- endfor -%}]{%- endcapture -%}
+    {%- else -%}
+      {%- assign ctx_type = 'home' -%}
+      {%- assign ctx_id = blank -%}
+      {%- assign ctx_cart_ids = blank -%}
+  {%- endcase -%}
+
+  {%- comment -%} ==== SNR PRESENTATION — change freely ==== {%- endcomment -%}
+  {%- comment -%} Extra attributes to request from the campaign, comma-separated (e.g. 'compareAtPrice'); read them in a customized buildCard(). {%- endcomment -%}
+  {%- assign snr_extra_attrs = '' -%}
+
+  <style>
+    .snr-recommendations { padding: 2rem 1rem; }
+    .snr-recommendations__title { text-align: center; margin: 0 0 1.5rem; }
+    .snr-recommendations__grid {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(var(--snr-cols-mobile, 2), 1fr);
+    }
+    @media (min-width: 750px) {
+      .snr-recommendations__grid {
+        grid-template-columns: repeat(var(--snr-cols-desktop, 4), 1fr);
+      }
+    }
+    .snr-recommendations__slot { min-height: 0; }
+    .snr-recommendations__slot--skeleton {
+      background: linear-gradient(90deg, #eee 0%, #f5f5f5 50%, #eee 100%);
+      background-size: 200% 100%;
+      animation: snr-skeleton 1.2s ease-in-out infinite;
+      border-radius: 4px;
+      aspect-ratio: 3 / 4;
+    }
+    @keyframes snr-skeleton {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  </style>
+
+  {%- comment -%} ==== SNR INTEGRATION PLUMBING — do not change ==== {%- endcomment -%}
+  <section
+    class="snr-recommendations"
+    data-snr-recommendations
+    data-campaign-id="{{ campaign_id }}"
+    data-limit="{{ block.settings.limit }}"
+    data-context-type="{{ ctx_type }}"
+    data-context-id="{{ ctx_id }}"
+    data-cart-item-ids="{{ ctx_cart_ids | escape }}"
+    data-money-format="{{ shop.money_format | escape }}"
+    data-attr-handle="{{ block.settings.attr_handle | escape }}"
+    data-attr-title="{{ block.settings.attr_title | escape }}"
+    data-attr-image="{{ block.settings.attr_image | escape }}"
+    data-attr-price="{{ block.settings.attr_price | escape }}"
+    data-attr-extra="{{ snr_extra_attrs | escape }}"
+    style="--snr-cols-desktop: {{ block.settings.columns_desktop }}; --snr-cols-mobile: {{ block.settings.columns_mobile }};"
+  >
+    {%- comment -%} ==== SNR PRESENTATION — change freely ==== {%- endcomment -%}
+    <h2 class="snr-recommendations__title">{{ block.settings.title }}</h2>
+    {%- comment -%} ==== SNR INTEGRATION PLUMBING — do not change ==== {%- endcomment -%}
+    {%- comment -%} Add classes to the ul/li freely; keep snr-recommendations__slot and the slot count (= limit) — the runtime fills these. {%- endcomment -%}
+    <ul class="snr-recommendations__grid">
+      {%- for i in (1..block.settings.limit) -%}
+        <li class="snr-recommendations__slot snr-recommendations__slot--skeleton"></li>
+      {%- endfor -%}
+    </ul>
+  </section>
+
+  <script src="{{ 'snr-utils.js' | asset_url }}" defer></script>
+  <script src="{{ 'recommendations.js' | asset_url }}" defer></script>
+
+{%- endif -%}

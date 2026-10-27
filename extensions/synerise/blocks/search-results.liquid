@@ -1,0 +1,74 @@
+{%- comment -%} ==== SNR INTEGRATION PLUMBING — do not change ==== {%- endcomment -%}
+{%- assign index = block.settings.search_index -%}
+
+{%- comment -%}
+  Tracker key and API host come from the Synerise tracking code on the page
+  (window.__snrs.config), resolved client-side by snr-search-page.js. Only the
+  per-block search index is known at render time; the block hides itself at
+  runtime if the shared config is missing.
+{%- endcomment -%}
+{%- if index == blank -%}
+  {%- if request.design_mode -%}
+    <p style="padding:1rem;border:1px dashed #999;color:#666;text-align:center;">
+      Synerise Search Results: set the search index in this block's settings. The tracker key and API host come from the Synerise tracking code on the page.
+    </p>
+  {%- endif -%}
+{%- else -%}
+
+  {{ 'snr-search.css' | asset_url | stylesheet_tag }}
+  {{ 'snr-cards.css' | asset_url | stylesheet_tag }}
+  {%- comment -%} ==== SNR PRESENTATION — change freely ==== {%- endcomment -%}
+  {%- comment -%} Extra attributes to request from the index, comma-separated (e.g. 'compareAtPrice'); read them in a customized buildCard(). {%- endcomment -%}
+  {%- assign snr_extra_attrs = '' -%}
+  {%- comment -%} Only the per-block setting lives inline; all static styles are in snr-search.css. {%- endcomment -%}
+  <style>.snr-search-page { --snr-cols: {{ block.settings.columns }}; }</style>
+
+  <main class="page-width snr-search-page">
+    {%- comment -%} ==== SNR INTEGRATION PLUMBING — do not change ==== {%- endcomment -%}
+    <div data-snr-search-root
+         data-index="{{ index }}"
+         data-page-size="{{ block.settings.page_size }}"
+         data-show-facets="{% if block.settings.show_facets %}1{% else %}0{% endif %}"
+         data-show-heading="{% if block.settings.show_heading %}1{% else %}0{% endif %}"
+         data-empty-text="{{ block.settings.no_results_text | escape }}"
+         data-money-format="{{ shop.money_format | escape }}"
+         data-attr-handle="{{ block.settings.attr_handle | escape }}"
+         data-attr-title="{{ block.settings.attr_title | escape }}"
+         data-attr-image="{{ block.settings.attr_image | escape }}"
+         data-attr-price="{{ block.settings.attr_price | escape }}"
+         data-attr-extra="{{ snr_extra_attrs | escape }}">
+    </div>
+  </main>
+
+  <script src="{{ 'snr-utils.js' | asset_url }}" defer></script>
+  <script src="{{ 'snr-search-page.js' | asset_url }}" defer></script>
+
+{%- endif -%}
+
+{%- comment -%} ==== SNR PRESENTATION — change freely ==== {%- endcomment -%}
+{% schema %}
+{
+  "name": "Synerise Search Results",
+  "target": "section",
+  "settings": [
+    { "type": "text",   "id": "search_index", "label": "Search index",
+      "info": "The Synerise AI Search index id (UUID) the storefront queries. Required." },
+    { "type": "range",  "id": "columns",   "label": "Grid columns (desktop)",
+      "min": 2, "max": 6, "step": 1, "default": 4 },
+    { "type": "range",  "id": "page_size", "label": "Results per page",
+      "min": 8, "max": 48, "step": 4, "default": 24 },
+    { "type": "checkbox", "id": "show_facets", "label": "Show filters (facets)", "default": true },
+    { "type": "checkbox", "id": "show_heading", "label": "Show results heading (e.g. Search results for \"…\")",
+      "default": false },
+    { "type": "text",   "id": "no_results_text", "label": "No-results message",
+      "default": "No results found." },
+
+    { "type": "header", "content": "Result field mapping (advanced)",
+      "info": "Attribute names returned by your AI Search index, used to build result cards. Change only if your index uses non-standard names. Use dot paths for nested values (e.g. price.value)." },
+    { "type": "text",   "id": "attr_handle", "label": "Handle attribute", "default": "handle" },
+    { "type": "text",   "id": "attr_title",  "label": "Title attribute",  "default": "title" },
+    { "type": "text",   "id": "attr_image",  "label": "Image attribute",  "default": "imageLink" },
+    { "type": "text",   "id": "attr_price",  "label": "Price attribute",  "default": "price.value" }
+  ]
+}
+{% endschema %}

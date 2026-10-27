@@ -1,0 +1,113 @@
+/* assets/snr-suggestions.css — anchored autocomplete dropdown */
+.snr-sg {
+  position: absolute;
+  z-index: 9999;
+  background: #fff;
+  border: 1px solid #e3e3e3;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+.snr-sg[hidden] { display: none; }
+.snr-sg__section + .snr-sg__section { border-top: 1px solid #f0f0f0; }
+.snr-sg__list { list-style: none; margin: 0; padding: 4px 0; }
+.snr-sg__suggestion {
+  padding: 8px 14px; cursor: pointer; font-size: 14px;
+}
+.snr-sg__suggestion:hover, .snr-sg__suggestion.is-active { background: #f5f5f5; }
+.snr-sg__products { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 8px 12px; }
+.snr-sg__product { list-style: none; padding: 6px; border-radius: 8px; }
+.snr-sg__product:hover, .snr-sg__product.is-active { background: rgba(127, 127, 127, 0.1); }
+.snr-sg__noresults-msg { padding: 12px 16px; font-size: 14px; opacity: 0.75; }
+.snr-sg__noresults-heading { padding: 10px 16px 4px; font-weight: 600; }
+/* Skin mode: the theme styles the individual cards/pills, but its grid/flex
+   layout is scoped to the native container we don't reproduce — so constrain the
+   lists ourselves (product grid + wrapping pill row) and add a keyboard highlight
+   for the active option. */
+.snr-sg--skin .predictive-search-results__wrapper-products {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
+  padding: 12px 16px;
+}
+.snr-sg--skin .predictive-search-results__wrapper-queries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+}
+/* The theme's section-title styling is scoped to the native container we don't
+   reproduce, so style the heading ourselves to read as a section label. */
+.snr-sg--skin .predictive-search-results__title {
+  margin: 0;
+  padding: 14px 16px 2px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+/* Keep the theme card from stretching to the grid row height (which crops the
+   image); let it size to its content with the image at its configured ratio. */
+.snr-sg--skin .resource-card { height: auto; }
+.snr-sg--skin .resource-card__image { width: 100%; height: auto; }
+.snr-sg--skin [role="option"].is-active { outline: 2px solid currentColor; outline-offset: -2px; border-radius: 6px; }
+.snr-sg__footer { padding: 10px 16px; text-align: center; }
+/* Fallback pill for themes without a .button class; defined at zero specificity
+   (:where) so the theme's own .button fully overrides it when present. */
+:where(.snr-sg__viewall) {
+  display: inline-block; font: inherit; color: inherit; cursor: pointer;
+  text-decoration: none; padding: 10px 20px;
+  border: 1px solid currentColor; border-radius: 999px;
+}
+.snr-sg__viewall:hover { opacity: 0.85; }
+@media (max-width: 600px) { .snr-sg__products { grid-template-columns: 1fr; } }
+
+/* Modal-search themes (e.g. Horizon): the panel is re-parented into the search
+   modal content and flows as a block instead of an absolute popover. */
+.snr-sg.snr-sg--modal {
+  position: static;
+  width: 100%;
+  max-height: 70vh;
+  overflow-y: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* In the wide search modal, cap card width and wrap many per row (the base
+   two-column grid is sized for the narrow inline dropdown, where it would
+   otherwise stretch each card to half the modal width). The whole panel
+   scrolls (above), so the grid itself must not clip rows. */
+.snr-sg--modal .snr-sg__products {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
+  padding: 12px 16px;
+}
+.snr-sg--modal .snr-sg__suggestion { padding: 10px 16px; }
+/* "View all" as a floating, centered pill pinned to the bottom of the scrolling
+   panel — mirrors the theme's native predictive-search button, which also floats
+   over the results. The footer strip is transparent and click-through; only the
+   pill itself is interactive. */
+.snr-sg--modal .snr-sg__footer {
+  position: sticky;
+  bottom: 12px;
+  z-index: 1;
+  margin-top: 8px;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  pointer-events: none;
+}
+.snr-sg--modal .snr-sg__viewall { pointer-events: auto; }
+
+/* Full takeover: suppress the theme's native predictive-search dropdown and its
+   footer ("View all") unconditionally. This stylesheet is loaded (render-blocking)
+   only when the Synerise Suggestions block is configured, so the rules are present
+   before the native modal paints — no flicker, and no JS-toggled class to race. We
+   own every search state (zero-state, results, no-results) in our own panel. */
+#predictive-search-results { display: none !important; }
+.predictive-search-form__footer { display: none !important; }
