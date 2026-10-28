@@ -123,9 +123,12 @@ Synerise does not update it, and the selectors and classes involved are Horizon'
 loaded from `assets/predictive-search.js`) that fetches Shopify's predictive search
 and renders the result into its dropdown. Instead of hiding that dropdown and drawing
 a second one, replace its **data source**: keep the component — modal, reset button,
-keyboard navigation, card classes — and change only the two methods that fetch, so
-the dropdown is filled from Synerise. The theme makes no Shopify predictive-search
-request, and nothing else in it changes.
+keyboard navigation, card classes — and change the methods that fetch, so the
+dropdown is filled from Synerise. The theme then makes no Shopify predictive-search
+request. Inspect the Horizon version you actually have: the method names and the
+empty-state lifecycle differ between releases, and the empty state may need to load
+regardless of recently-viewed products once it is campaign-driven. Preserve every
+behavior you are not replacing.
 
 **What to build.**
 
@@ -134,19 +137,33 @@ request, and nothing else in it changes.
   autocomplete endpoints in parallel (one `AbortController` per component, previous
   call aborted), calls the recommendations endpoint for the empty and no-results
   states, and builds Horizon's own result markup (`predictive-search-results__*`,
-  `resource-card`) into the component's results container. Keep configuration
+  `resource-card`) into the component's results container. Build product and search
+  links from `window.Shopify.routes.root` so they stay locale-aware, and treat every
+  API value as text (set `textContent`, never inject it as HTML). Keep configuration
   (indexes, campaigns, limits, minimum characters, labels) at the top of the file.
   Product cards fire `itemSearchClick` with the `itemId` and `correlationId`.
 - An edited copy of `assets/predictive-search.js` that imports the helper and calls it
   from the method that fetches search results and from the method that resets the
   search (the empty state), aborting the helper's request when the component is
-  removed. Everything else in the file stays as shipped.
+  removed. Leave unrelated behavior as shipped.
 
 **Install (Edit code, on a duplicate theme).** Back up `assets/predictive-search.js`
 under another name, upload the two files, turn the **Synerise Suggestions** embed off
 and leave **Synerise** (tracking) on. Check typing past the minimum characters,
 keyboard navigation, a product click, clearing the input and a no-results term. To
 undo, restore the backup and re-enable the embed.
+
+**Acceptance checks.** With the test theme open and the network panel filtered:
+
+- No request to `/search/suggest` (the Shopify predictive-search endpoint) while
+  typing, opening or clearing the search.
+- At the configured minimum characters, the Synerise autocomplete request(s) appear —
+  one for products, one more for phrases if a phrase index is set — and the
+  recommendations request only in the empty and no-results states.
+- A product click sends `itemSearchClick` whose `item` is the `itemId` string and
+  whose `correlationId` matches the autocomplete response.
+- Clearing the input or typing quickly leaves no stale results: the earlier request is
+  aborted and only the latest term's results render.
 
 **Things to watch.**
 
@@ -158,8 +175,8 @@ undo, restore the backup and re-enable the embed.
 - Horizon's recently-viewed empty state is replaced by the zero-state campaign.
 
 **What you give up:** app-managed updates, cross-theme portability and the coming
-configurator. **What you gain:** one dropdown, one fetch per keystroke, full control
-of the markup.
+configurator. **What you gain:** one dropdown, no duplicate Shopify predictive-search
+requests, full control of the markup.
 
 ## Prerequisites
 
