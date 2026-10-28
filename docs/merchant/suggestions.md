@@ -17,7 +17,7 @@ build a theme-owned alternative — preceded by the three ways to use suggestion
 |---|---|---|
 | **1. Shipped app embed** (default) | You want working autocomplete with settings-level customization | Synerise — updated with the app |
 | **2. Embed + your theme CSS** | Spacing, colors, typography of the dropdown | You own the CSS; the markup may change between app versions |
-| **3. Theme-owned alternative built from this contract** | Structural changes (layout, badges, extra data) or a single dropdown with no native fetch | You — it is ordinary theme code; see the [Horizon example](#example-theme-owned-suggestions-on-horizon-module-swap) |
+| **3. Theme-owned alternative built from this contract** | Structural changes (layout, badges, extra data) or a single dropdown with no native fetch | You — it is ordinary theme code; see the [Horizon example](#example-theme-owned-suggestions-on-horizon) |
 
 **Route 1 — enable the embed.** Theme editor → *App embeds* → **Synerise
 Suggestions** → on; paste your **product search index (UUID)** (the same index as
@@ -114,82 +114,52 @@ GET {aiApiHost}/search/v2/indices/{suggestion_phrase_index}/autocomplete
   theme's own markup (a "skin"); other themes use the widget's own cards.
 - Keyboard navigation (↑/↓/Enter/Esc) over `[role=option]`.
 
-## Example: theme-owned suggestions on Horizon (module swap)
+## Example: theme-owned suggestions on Horizon
 
-Built by Shopify Sidekick in October 2026 from this contract alone, on a duplicate of
-the Horizon theme, and tested on a stage store. It is an example of route 3, not a
-Synerise deliverable: the code is yours, Synerise does not update it, and every
-selector and class in it is Horizon's.
+An approach for route 3 on the Horizon theme. It is ordinary theme code you own:
+Synerise does not update it, and the selectors and classes involved are Horizon's.
 
 **Idea.** Horizon's search modal is a web component (`predictive-search-component`,
-`assets/predictive-search.js`) that fetches Shopify's predictive search through the
-Section Rendering API and morphs the HTML into the dropdown. Instead of hiding that
-dropdown and drawing a second one (what the embed does), replace the **data source**:
-keep the component — modal, reset button, keyboard navigation, card classes — and swap
-the two methods that fetch, so the dropdown is filled from Synerise. Nothing else in
-the theme changes and no Shopify predictive-search request is made.
+loaded from `assets/predictive-search.js`) that fetches Shopify's predictive search
+and renders the result into its dropdown. Instead of hiding that dropdown and drawing
+a second one, replace its **data source**: keep the component — modal, reset button,
+keyboard navigation, card classes — and change only the two methods that fetch, so
+the dropdown is filled from Synerise. The theme makes no Shopify predictive-search
+request, and nothing else in it changes.
 
-**Files.**
+**What to build.**
 
-- `assets/snr-native-suggestions.js` (new, ~120 lines) — exports
-  `renderSynerise(component, term)` and `cancelSynerise(component)`. It reads
-  `window.__snrs.config` and the `_snrs_uuid` cookie, calls the two autocomplete
-  endpoints in parallel (one `AbortController` per component, previous call aborted),
-  the recommendations endpoint for the empty and no-results states, and builds
-  Horizon's own result markup (`predictive-search-results__*`, `resource-card`) into
-  `component.refs.predictiveSearchResults`. Configuration (indexes, campaigns, limits,
-  `minChars`, labels) sits at the top of the file. Product cards fire
-  `itemSearchClick` with the `itemId` and the `correlationId`.
-- `assets/predictive-search.js` (Horizon's, edited) — the diff against the original is
-  small:
-
-```js
-import { renderSynerise, cancelSynerise } from './snr-native-suggestions.js?v=1';
-// …
-disconnectedCallback() {
-  super.disconnectedCallback();
-  this.#controller.abort();
-  cancelSynerise(this);
-}
-// …
-async #getSearchResults(searchTerm) {
-  await renderSynerise(this, searchTerm);   // was: Section Rendering API fetch + morph
-  this.#resetScrollPositions();
-}
-// …
-#resetSearch = async () => {
-  this.#currentIndex = -1;
-  this.refs.searchInput.value = '';
-  this.#hideResetButton();
-  await renderSynerise(this, '');           // was: empty-state section + recently viewed
-  this.#resetScrollPositions();
-};
-```
-
-  Two further edits: the empty state loads unconditionally (the original only loaded
-  it when recently-viewed products existed), and the `SearchUpdateEvent` dispatch is
-  dropped, so anything else listening for Horizon's search updates goes quiet.
+- A small helper module in `assets/` that implements this contract: reads the
+  connection from `window.__snrs.config` and the `_snrs_uuid` cookie, calls the two
+  autocomplete endpoints in parallel (one `AbortController` per component, previous
+  call aborted), calls the recommendations endpoint for the empty and no-results
+  states, and builds Horizon's own result markup (`predictive-search-results__*`,
+  `resource-card`) into the component's results container. Keep configuration
+  (indexes, campaigns, limits, minimum characters, labels) at the top of the file.
+  Product cards fire `itemSearchClick` with the `itemId` and `correlationId`.
+- An edited copy of `assets/predictive-search.js` that imports the helper and calls it
+  from the method that fetches search results and from the method that resets the
+  search (the empty state), aborting the helper's request when the component is
+  removed. Everything else in the file stays as shipped.
 
 **Install (Edit code, on a duplicate theme).** Back up `assets/predictive-search.js`
 under another name, upload the two files, turn the **Synerise Suggestions** embed off
-and leave **Synerise** (tracking) on. Test: typing at least `minChars` characters,
-keyboard navigation, a product click, clearing the input, a no-results term. Undo =
-restore the backup and re-enable the embed.
+and leave **Synerise** (tracking) on. Check typing past the minimum characters,
+keyboard navigation, a product click, clearing the input and a no-results term. To
+undo, restore the backup and re-enable the embed.
 
-**Gotchas seen while testing.**
+**Things to watch.**
 
-- Horizon loads the module from `snippets/search-modal.liquid` via
-  `'predictive-search.js' | asset_url`. If the snippet ends up pointing at your backup,
-  the native search silently keeps running — check which file it loads.
-- Browsers cache ES-module imports aggressively: bump the `?v=` on the import whenever
-  you change the helper, then fully reload the theme editor.
-- Format prices with the shop's money format (expose `shop.money_format` on a data
-  attribute from Liquid, as the embed does) rather than a hardcoded currency.
+- Horizon loads the module from `snippets/search-modal.liquid`. Make sure it still
+  points at the edited file, not the backup, or the native search keeps running.
+- Browsers cache module imports; add a version query to the import (`?v=2`) when the
+  helper changes, then fully reload the theme editor.
+- Format prices with the shop's money format rather than a hardcoded currency.
 - Horizon's recently-viewed empty state is replaced by the zero-state campaign.
 
-**What you give up:** app-managed updates, cross-theme portability, and the coming
-configurator. **What you gain:** one dropdown, one fetch per keystroke, full control of
-the markup.
+**What you give up:** app-managed updates, cross-theme portability and the coming
+configurator. **What you gain:** one dropdown, one fetch per keystroke, full control
+of the markup.
 
 ## Prerequisites
 
