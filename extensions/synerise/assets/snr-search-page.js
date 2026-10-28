@@ -141,6 +141,7 @@
       correlationId: '',
       facets: [],         // normalizeFacets(extras): [{name,type,values:[{value,count}]}]
       results: [],        // accumulated across load-more
+      req: { seq: 0, controller: null },   // in-flight request bookkeeping (beginRequest)
       els: {}             // populated when skeleton injected
     };
   }
@@ -167,28 +168,57 @@
     return (filter.values || []).join(',');
   }
 
+  // Typed URL form (written since the hardening release): text values are repeated
+  // `fv.<attr>=<value>` entries (no delimiter, so commas and tildes in values are
+  // safe); ranges are `fr.<attr>=min~max` (both sides numeric or empty). The legacy
+  // `f.<attr>` form above is still READ for links shared before, never written.
+  function encodeFilters(filters) {
+    var params = new URLSearchParams();
+    var keys = Object.keys(filters || {});
+    for (var i = 0; i < keys.length; i++) {
+      var f = filters[keys[i]];
+      if (!f) continue;
+      if (f.type === 'range') {
+        if (f.min == null && f.max == null) continue;
+        params.set('fr.' + keys[i], (f.min != null ? f.min : '') + '~' + (f.max != null ? f.max : ''));
+      } else {
+        var vals = f.values || [];
+        for (var j = 0; j < vals.length; j++) if (vals[j].length) params.append('fv.' + keys[i], vals[j]);
+      }
+    }
+    return params;
+  }
+  function decodeFilters(params) {
+    var filters = {};
+    var legacy = {};
+    params.forEach(function (val, key) {
+      if (key.indexOf('fv.') === 0) {
+        var name = key.substring(3);
+        if (!filters[name] || filters[name].type !== 'text') filters[name] = { type: 'text', values: [] };
+        if (val.length) filters[name].values.push(val);
+      } else if (key.indexOf('fr.') === 0) {
+        filters[key.substring(3)] = parseFilterValue(val.indexOf('~') === -1 ? val + '~' : val);
+      } else if (key.indexOf('f.') === 0) {
+        legacy[key.substring(2)] = parseFilterValue(val);
+      }
+    });
+    var lk = Object.keys(legacy);
+    for (var i = 0; i < lk.length; i++) if (!filters[lk[i]]) filters[lk[i]] = legacy[lk[i]];
+    return filters;
+  }
+
   function parseUrl() {
     var params = new URLSearchParams(window.location.search);
     var query = params.get('q') || '';
     var sort = params.get('sort') || 'relevance';
-    var filters = {};
-    params.forEach(function (val, key) {
-      if (key.indexOf('f.') === 0) {
-        filters[key.substring(2)] = parseFilterValue(val);
-      }
-    });
-    return { query: query, sort: sort, filters: filters };
+    return { query: query, sort: sort, filters: decodeFilters(params) };
   }
 
   function syncUrl(state) {
     var params = new URLSearchParams();
     if (state.query) params.set('q', state.query);
     if (state.sort && state.sort !== 'relevance') params.set('sort', state.sort);
-    var fkeys = Object.keys(state.filters);
-    for (var i = 0; i < fkeys.length; i++) {
-      var ser = serializeFilter(state.filters[fkeys[i]]);
-      if (ser && ser !== '~') params.set('f.' + fkeys[i], ser);
-    }
+    encodeFilters(state.filters).forEach(function (val, key) { params.append(key, val); });
     var qs = params.toString();
     var newUrl = window.location.pathname + (qs ? '?' + qs : '') + window.location.hash;
     window.history.replaceState(null, '', newUrl);
@@ -325,13 +355,14 @@
 
   function facetValueLi(state, facetName, val) {
     var sel = state.filters[facetName];
+    var count = SNRUtils.toNumber(val.count);   // API value: render only a real number
     var selected = !!(sel && sel.type === 'text' && sel.values.indexOf(val.value) !== -1);
     return '<li class="snr-facet__item">' +
       '<label class="snr-facet__label">' +
         '<input type="checkbox" data-facet-name="' + escapeHtml(facetName) + '"' +
           ' data-facet-value="' + escapeHtml(val.value) + '"' + (selected ? ' checked' : '') + '>' +
         '<span class="snr-facet__value">' + escapeHtml(val.value) + '</span>' +
-        '<span class="snr-facet__count">(' + (val.count || 0) + ')</span>' +
+        '<span class="snr-facet__count">(' + (isFinite(count) ? count : 0) + ')</span>' +
       '</label></li>';
   }
 
@@ -387,14 +418,65 @@
     return out;
   }
 
+  // ---- Request lifecycle ----
+  // One in-flight request per root. beginRequest() aborts the previous one, bumps
+  // the sequence and snapshots everything the request is built from, so a response
+  // is applied against what was ASKED, never against state that moved meanwhile
+  // (a slow earlier response can no longer overwrite a newer one, and a pending
+  // load-more is dropped by a filter/sort/query change).
+  function beginRequest(state, page) {
+    if (!state.req) state.req = { seq: 0, controller: null };
+    if (state.req.controller) state.req.controller.abort();
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    state.req.controller = controller;
+    state.req.seq += 1;
+    return {
+      seq: state.req.seq,
+      query: state.query,
+      sort: state.sort,
+      filters: JSON.parse(JSON.stringify(state.filters || {})),
+      page: page,
+      signal: controller && controller.signal
+    };
+  }
+  function isCurrent(state, snapshot) {
+    return !!(state.req && snapshot && state.req.seq === snapshot.seq);
+  }
+
+  // Response handler for one snapshot. Appends (page > 1) commit the page number
+  // only here, on success.
+  function applyResponse(state, snapshot, json, append) {
+    if (!isCurrent(state, snapshot)) return;
+    var data = (json && json.data) || [];
+    state.totalResults = (json && json.meta && typeof json.meta.totalCount === 'number')
+      ? json.meta.totalCount
+      : data.length;
+    state.facets = normalizeFacets(json && json.extras);
+    state.correlationId = (json && json.extras && json.extras.correlationId) || '';
+    state.page = snapshot.page;
+
+    if (!data.length && !append) {
+      renderEmpty(state);
+      return;
+    }
+
+    state.els.empty.hidden = true;
+    if (!append) state.results = [];
+    state.results = state.results.concat(data);
+    renderGrid(state, data, append);
+    renderFacets(state);
+    updateLoadMore(state);
+  }
+
   function performSearch(state, append) {
+    var snap = beginRequest(state, append ? state.page + 1 : 1);
     var uuid = getClientUuid();
     var url = state.apiUri + '/search/v2/indices/' + encodeURIComponent(state.index) + '/query'
       + '?token=' + encodeURIComponent(state.trackerKey);
     var body = {
-      query: state.query,
+      query: snap.query,
       limit: state.pageSize,
-      page: state.page,
+      page: snap.page,
       includeMeta: true,
       displayAttribute: cardAttributes(state.fields)
     };
@@ -405,51 +487,50 @@
       body.facets = ['*'];          // all facetable attributes
       body.includeFacets = 'all';   // returns allFacets (+ filteredFacets)
     }
-    var sortSpec = SORT_MAP[state.sort];
+    var sortSpec = SORT_MAP[snap.sort];
     if (sortSpec) {
       // Resolve the sort attribute from the configured field mapping so it matches
       // the merchant's index (e.g. "price.value"), not the default slot name.
       body.sortBy = state.fields[sortSpec.field];
       body.ordering = sortSpec.ordering;
     }
-    var iql = buildFilterIql(state.filters);
+    var iql = buildFilterIql(snap.filters);
     if (iql) body.filters = iql;
+
+    // Load more is unavailable while ANY request is pending: an append started
+    // during a replace (filter/sort/query) would abort it and mix result sets.
+    state.els.loadmoreBtn.disabled = true;
+    function settle() {
+      // Whatever request owns the UI now re-enables the button — including a
+      // filter/sort response that superseded a pending append.
+      if (isCurrent(state, snap)) state.els.loadmoreBtn.disabled = false;
+    }
 
     return fetch(url, {
       method: 'POST',
       credentials: 'omit',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: snap.signal
     }).then(function (res) {
       if (!res.ok) throw new Error('search_api_' + res.status);
       return res.json();
     }).then(function (json) {
-      var data = (json && json.data) || [];
-      state.totalResults = (json && json.meta && typeof json.meta.totalCount === 'number')
-        ? json.meta.totalCount
-        : data.length;
-      state.facets = normalizeFacets(json && json.extras);
-      state.correlationId = (json && json.extras && json.extras.correlationId) || '';
-
-      if (!data.length && !append) {
-        renderEmpty(state);
-        return;
-      }
-
-      state.els.empty.hidden = true;
-      if (!append) state.results = [];
-      state.results = state.results.concat(data);
-      renderGrid(state, data, append);
-      renderFacets(state);
-      updateLoadMore(state);
-    }).catch(function () {
-      // Network error or non-2xx: show a generic error in the grid area.
+      applyResponse(state, snap, json, append);
+      settle();
+    }).catch(function (err) {
+      if (err && err.name === 'AbortError') return;   // superseded on purpose
+      if (!isCurrent(state, snap)) return;            // a newer request owns the UI
       if (!append) {
+        // Network error or non-2xx: show a generic error in the grid area.
         renderEmpty(state);
         state.els.empty.textContent = 'Search is temporarily unavailable. Please try again.';
+        state.els.loadmoreBtn.hidden = true;
+      } else if (typeof console !== 'undefined' && console.warn) {
+        // Append failed: keep what is on screen, let the shopper retry.
+        console.warn('[snr-search] load more failed; existing results kept');
       }
-      // For append: leave existing results in place; hide the load-more.
-      state.els.loadmoreBtn.hidden = true;
+      settle();
     });
   }
 
@@ -527,9 +608,9 @@
       }
     });
 
-    // Load more.
+    // Load more — the page number is committed by applyResponse on success only.
     state.els.loadmoreBtn.addEventListener('click', function () {
-      state.page = state.page + 1;
+      if (state.els.loadmoreBtn.disabled) return;
       performSearch(state, true);
     });
 
@@ -555,6 +636,7 @@
     root.__snrSearchInitialized = true;
 
     var state = newState(root);
+    root.__snrState = state;
     if (!state.trackerKey || !state.apiUri || !state.index) return;
 
     var parsed = parseUrl();
@@ -611,6 +693,13 @@
       normalizeFacets: normalizeFacets,
       parseFilterValue: parseFilterValue,
       serializeFilter: serializeFilter,
+      encodeFilters: encodeFilters,
+      decodeFilters: decodeFilters,
+      facetValueLi: facetValueLi,
+      beginRequest: beginRequest,
+      isCurrent: isCurrent,
+      applyResponse: applyResponse,
+      applyFilterChange: applyFilterChange,
       cardAttributes: cardAttributes,
       renderGrid: renderGrid,
       parseExtraAttributes: SNRUtils.parseExtraAttributes,

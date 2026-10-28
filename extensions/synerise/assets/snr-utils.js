@@ -182,7 +182,8 @@
     buildCard: buildCard,
     productUrl: productUrl,
     searchUrl: searchUrl,
-    getConfig: getConfig
+    getConfig: getConfig,
+    toNumber: toNumber
   };
 
   if (typeof window !== 'undefined') { window.SNRUtils = api; }

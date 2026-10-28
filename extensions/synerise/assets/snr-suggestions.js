@@ -142,8 +142,8 @@
       if (cfg.skin) {
         var title = SNRUtils.getPath(p, fields.title || 'title') || handle || '';
         var image = SNRUtils.getPath(p, fields.image || 'imageLink');
-        var priceNum = Number(SNRUtils.getPath(p, fields.price || 'price.value'));
-        var price = SNRUtils.formatMoney(isFinite(priceNum) ? priceNum : NaN, cfg.moneyFormat);
+        var priceNum = SNRUtils.toNumber(SNRUtils.getPath(p, fields.price || 'price.value'));   // null/'' → NaN → no price
+        var price = isFinite(priceNum) ? SNRUtils.formatMoney(priceNum, cfg.moneyFormat) : '';
         parts.push('<li class="predictive-search-results__card predictive-search-results__card--product" ' + hooks + '>' +
           '<div class="resource-card" data-resource-type="product">' +
           '<a class="resource-card__link" href="' + SNRUtils.escapeHtml(SNRUtils.productUrl(handle)) + '">' +
@@ -165,10 +165,10 @@
   // Wrap product <li>s in the appropriate list container for the current mode.
   function productsListHtml(products, cfg) {
     if (cfg.skin) {
-      return '<ul class="predictive-search-results__list predictive-search-results__wrapper-products list-unstyled" role="listbox">' +
+      return '<ul class="predictive-search-results__list predictive-search-results__wrapper-products list-unstyled">' +
         productItemsHtml(products, cfg) + '</ul>';
     }
-    return '<ul class="snr-sg__list snr-sg__products" role="listbox">' + productItemsHtml(products, cfg) + '</ul>';
+    return '<ul class="snr-sg__list snr-sg__products">' + productItemsHtml(products, cfg) + '</ul>';
   }
 
   function renderDropdown(parsed, cfg, query) {
@@ -181,7 +181,7 @@
         inner.push('<ul class="predictive-search-results__list predictive-search-results__wrapper predictive-search-results__wrapper-queries list-unstyled">' +
           suggestionItemsHtml(sug, cfg, query) + '</ul>');
       } else {
-        inner.push('<div class="snr-sg__section snr-sg__section--suggestions"><ul class="snr-sg__list" role="listbox">' +
+        inner.push('<div class="snr-sg__section snr-sg__section--suggestions"><ul class="snr-sg__list">' +
           suggestionItemsHtml(sug, cfg, query) + '</ul></div>');
       }
     }
@@ -211,8 +211,9 @@
     var message = opts.message || '';
     var heading = opts.heading || '';
     var products = opts.products || [];
-    if (!message && !products.length) return '';
-    var parts = ['<div class="snr-sg__section snr-sg__noresults">'];
+    var prefixHtml = opts.prefixHtml || '';   // e.g. phrase pills that loaded although products failed
+    if (!message && !products.length && !prefixHtml) return '';
+    var parts = [prefixHtml, '<div class="snr-sg__section snr-sg__noresults">'];
     if (message) parts.push('<div class="snr-sg__noresults-msg">' + SNRUtils.escapeHtml(message) + '</div>');
     if (products.length) {
       if (heading) {
@@ -224,6 +225,18 @@
     }
     parts.push('</div>');
     return parts.join('');
+  }
+
+  // Combine the two autocomplete results (each null on error) into one outcome.
+  //   products failed            → 'error'   (phrases kept for the error panel)
+  //   nothing to show            → 'empty'
+  //   otherwise                  → 'results'
+  function decideQueryOutcome(prod, suggestions) {
+    var sug = suggestions || [];
+    if (prod === null || prod === undefined) return { kind: 'error', products: [], suggestions: sug, correlationId: '' };
+    var products = prod.products || [];
+    var kind = (products.length || sug.length) ? 'results' : 'empty';
+    return { kind: kind, products: products, suggestions: sug, correlationId: prod.correlationId || '' };
   }
 
   function readConfig(el, shared) {
@@ -261,11 +274,197 @@
 
   function debounce(fn, ms) {
     var t;
-    return function () {
+    function wrapped() {
       var args = arguments, ctx = this;
       clearTimeout(t);
       t = setTimeout(function () { fn.apply(ctx, args); }, ms);
+    }
+    wrapped.cancel = function () { clearTimeout(t); };
+    return wrapped;
+  }
+
+  // Generation gate: a render is allowed only for the latest token. Every input
+  // event and every dismissal invalidates synchronously, so a late response for
+  // an earlier term (or for a closed panel) is dropped instead of rendered.
+  function createGate() {
+    var gen = 0;
+    return {
+      next: function () { gen += 1; return gen; },
+      current: function (token) { return token === gen; },
+      invalidate: function () { gen += 1; }
     };
+  }
+
+  // ---- Keyboard + ARIA (combobox pattern) ----
+  // The panel is the single listbox; options get ids and aria-selected; while the
+  // panel is open the bound input carries aria-expanded / aria-controls /
+  // aria-activedescendant and gets its ORIGINAL values back on close (a theme
+  // such as Horizon sets its own aria-controls on the same input).
+  var LISTBOX_ID = 'snr-sg-listbox';
+  var NAV_KEYS = { ArrowDown: 1, ArrowUp: 1, Enter: 1 };
+
+  function openAria(widget, input) {
+    var panel = widget.panel;
+    panel.setAttribute('role', 'listbox');
+    panel.id = LISTBOX_ID;
+    var opts = panel.querySelectorAll('[role=option]');
+    for (var i = 0; i < opts.length; i++) if (!opts[i].id) opts[i].id = 'snr-sg-opt-' + i;
+    if (!input.__snrSgAria) {
+      input.__snrSgAria = {
+        'aria-expanded': input.getAttribute('aria-expanded'),
+        'aria-controls': input.getAttribute('aria-controls'),
+        'aria-activedescendant': input.getAttribute('aria-activedescendant')
+      };
+    }
+    input.setAttribute('aria-expanded', 'true');
+    input.setAttribute('aria-controls', LISTBOX_ID);
+    input.removeAttribute('aria-activedescendant');
+  }
+
+  function closeAria(input) {
+    var saved = input && input.__snrSgAria;
+    if (!saved) return;
+    var keys = Object.keys(saved);
+    for (var i = 0; i < keys.length; i++) {
+      if (saved[keys[i]] == null) input.removeAttribute(keys[i]);
+      else input.setAttribute(keys[i], saved[keys[i]]);
+    }
+    delete input.__snrSgAria;
+  }
+
+  function setActive(widget, idx) {
+    var opts = widget.panel.querySelectorAll('[role=option]');
+    for (var i = 0; i < opts.length; i++) {
+      opts[i].classList.remove('is-active');
+      opts[i].removeAttribute('aria-selected');
+    }
+    var opt = opts[idx];
+    if (!opt) return null;
+    opt.classList.add('is-active');
+    opt.setAttribute('aria-selected', 'true');
+    var input = widget.cfg._activeInput;
+    if (input && opt.id) input.setAttribute('aria-activedescendant', opt.id);
+    return opt;
+  }
+
+  // Runs from a WINDOW capture listener so it precedes every theme handler
+  // (Horizon binds on document in capture phase, Dawn on its element). Consumes
+  // ArrowDown/ArrowUp/Enter on keydown — and the matching keyup, which Dawn
+  // navigates on — only while our panel is open for a bound input. Escape closes
+  // the panel and is NOT stopped: the theme still closes its modal. Returns true
+  // when the event was consumed.
+  function handleKey(widget, ev) {
+    if (!widget || !ev || !ev.target || !ev.target.__snrSgBound) return false;
+    var panel = widget.panel;
+    if (!panel || panel.hidden) return false;
+    if (ev.isComposing || ev.altKey || ev.ctrlKey || ev.metaKey) return false;   // IME / shortcuts belong to the page
+    var key = ev.key;
+    if (ev.type === 'keydown' && key === 'Escape') { widget.close(); return false; }   // also for option-less panels
+    var opts = panel.querySelectorAll('[role=option]');
+    if (!opts.length) return false;
+    if (ev.type === 'keyup') {
+      if (NAV_KEYS[key] && widget._consumedKey === key) {
+        widget._consumedKey = null;
+        ev.stopImmediatePropagation();
+        return true;
+      }
+      return false;
+    }
+    if (ev.type !== 'keydown') return false;
+    if (!NAV_KEYS[key]) return false;
+    var active = panel.querySelector('[role=option].is-active');
+    var idx = -1;
+    for (var k = 0; k < opts.length; k++) { if (opts[k] === active) { idx = k; break; } }
+    if (key === 'Enter') {
+      if (!active) return false;              // no selection: the theme submits the form
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      widget._consumedKey = key;
+      active.click();
+      return true;
+    }
+    ev.preventDefault(); ev.stopImmediatePropagation();
+    widget._consumedKey = key;
+    setActive(widget, key === 'ArrowDown' ? (idx + 1) % opts.length : (idx <= 0 ? opts.length : idx) - 1);
+    return true;
+  }
+
+  // One pair of window capture listeners per page, dispatching to the widget.
+  function installKeyCapture() {
+    if (typeof window === 'undefined' || !window.addEventListener || window.__snrSgKeys) return;
+    window.__snrSgKeys = true;
+    var types = ['keydown', 'keyup'];
+    for (var i = 0; i < types.length; i++) {
+      window.addEventListener(types[i], function (ev) {
+        var el = document.querySelector('[data-snr-suggestions]');
+        handleKey(el && el.__snrSg, ev);
+      }, true);
+    }
+  }
+
+  // ---- Horizon: stop the native predictive-search fetch ----
+  // Horizon's component base resolves the declarative on:input="/search" handler
+  // on the INSTANCE at dispatch time, and `search` is a public instance field. So
+  // replacing it on each upgraded <predictive-search-component> stops the theme's
+  // own suggest request per keystroke while its modal and keyboard handling stay
+  // intact; the clear-button toggle `search` used to do is kept by the stub below.
+  // The original is kept on the instance and
+  // restored whenever our widget cannot run — native search is never silenced
+  // without ours taking over. (Verified in a headless harness, 2026-10-28.)
+  var HORIZON_TAG = 'predictive-search-component';
+
+  // Replacement for Horizon's `search`: no fetch, but the one side effect the
+  // shopper sees — the clear (X) button following the input's value — is kept.
+  function horizonSearchStub(component) {
+    return function () {
+      var refs = component.refs;
+      if (refs && refs.resetButton && refs.searchInput) {
+        refs.resetButton.hidden = !String(refs.searchInput.value || '').trim();
+      }
+    };
+  }
+
+  // `selector` (the embed's input selector): when given, only components that
+  // contain an input WE bound are patched — native search is never silenced
+  // without ours taking over.
+  function neutralizeHorizon(scope, selector) {
+    var nodes = (scope && scope.querySelectorAll) ? scope.querySelectorAll(HORIZON_TAG) : [];
+    var patched = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      var c = nodes[i];
+      if (typeof c.search !== 'function' || c.__snrNativeSearch) continue;   // not upgraded yet / already ours
+      if (selector) {
+        var input = c.querySelector ? c.querySelector(selector) : null;
+        if (!input || !input.__snrSgBound) continue;
+      }
+      c.__snrNativeSearch = c.search;
+      c.search = horizonSearchStub(c);
+      patched += 1;
+    }
+    return patched;
+  }
+
+  function restoreHorizon(scope) {
+    var nodes = (scope && scope.querySelectorAll) ? scope.querySelectorAll(HORIZON_TAG) : [];
+    for (var i = 0; i < nodes.length; i++) {
+      var c = nodes[i];
+      if (!c.__snrNativeSearch) continue;
+      c.search = c.__snrNativeSearch;
+      delete c.__snrNativeSearch;
+    }
+  }
+
+  // Instances in the DOM before Horizon's module ran are plain elements until
+  // the definition lands: wait for it, upgrade synchronously, then patch.
+  function neutralizeHorizonWhenReady(scope, selector) {
+    if (typeof customElements !== 'undefined' && customElements && typeof customElements.whenDefined === 'function') {
+      customElements.whenDefined(HORIZON_TAG).then(function () {
+        var nodes = (scope && scope.querySelectorAll) ? scope.querySelectorAll(HORIZON_TAG) : [];
+        for (var i = 0; i < nodes.length; i++) if (customElements.upgrade) customElements.upgrade(nodes[i]);
+        neutralizeHorizon(scope, selector);
+      }).catch(function () {});
+    } else {
+      neutralizeHorizon(scope, selector);
+    }
   }
 
   // One dropdown element reused per widget, appended to <body>, positioned under
@@ -317,17 +516,39 @@
     panel.style.width = r.width + 'px';
   }
 
+  // Once-per-widget setup. The flag is set only after the connection and index
+  // check out, so a first attempt that ran before the tracking code published its
+  // config (or before the merchant set an index) is retried by the next initAll().
+  // Inputs are bound separately (bindInputs) and may be zero at this point: a
+  // search modal rendered later is bound on shopify:section:load.
   function initBlock(el, shared) {
     if (el.__snrSgInit) return;
-    el.__snrSgInit = true;
     var cfg = readConfig(el, shared);
-    if (!cfg.trackerKey || !cfg.apiUri || !cfg.index) return; // stay inert
-    if (!cfg.selector) return;
-    var inputs = document.querySelectorAll(cfg.selector);
-    if (!inputs.length) return;
+    if (!cfg.trackerKey || !cfg.apiUri || !cfg.index || !cfg.selector) {
+      restoreHorizon(document);   // inert: give Horizon its native search back
+      return;                     // retryable (flag not set)
+    }
+    el.__snrSgInit = true;
     var panel = ensurePanel();
+    var gate = createGate();
+    var widget;   // assigned once the closures below exist
 
-    function close() { panel.hidden = true; panel.innerHTML = ''; }
+    // Drop everything pending for the previous term: the in-flight request, the
+    // debounced fetch not yet started, and the right to render.
+    function invalidate() {
+      if (cfg._abort) cfg._abort.abort();
+      cfg._abort = null;
+      if (debouncedRun) debouncedRun.cancel();
+      gate.invalidate();
+    }
+
+    function close() {
+      invalidate();
+      panel.hidden = true;
+      panel.innerHTML = '';
+      closeAria(cfg._activeInput);
+      if (widget) widget._consumedKey = null;
+    }
 
     function fetchJson(url, signal) {
       return fetch(url, { credentials: 'omit', signal: signal })
@@ -341,6 +562,9 @@
       panel._correlationId = correlationId || '';
       positionPanel(panel, input);
       panel.hidden = false;
+      if (cfg._activeInput && cfg._activeInput !== input) closeAria(cfg._activeInput);   // panel moved to another input
+      cfg._activeInput = input;
+      openAria(widget, input);
     }
 
     // Recommendation-backed panel for the empty states. The native dropdown is
@@ -352,11 +576,12 @@
     // shown); heading sits above the recommendations and only appears with them
     // (so the zero-state, which has no status line, collapses to nothing when the
     // campaign returns no products).
-    function showRecoState(input, opts, signal) {
+    function showRecoState(input, opts, signal, guard) {
       function render(products) {
         if (signal && signal.aborted) return;
+        if (guard && !guard()) return;
         if (isFinite(cfg.maxProducts)) products = products.slice(0, cfg.maxProducts);
-        var html = renderNoResults(cfg, { message: opts.message, heading: opts.heading, products: products });
+        var html = renderNoResults(cfg, { message: opts.message, heading: opts.heading, products: products, prefixHtml: opts.prefixHtml });
         if (!html) { close(); return; }
         showHtml(input, html, '');
       }
@@ -369,11 +594,12 @@
       }
     }
 
-    function runQuery(input, q, signal) {
+    function runQuery(input, q, signal, guard) {
       var uuid = SNRUtils.getClientUuid();
       // Products (product index) and query suggestions (dedicated suggestion
-      // index) are two independent autocomplete calls — one failing or being
-      // empty must not suppress the other. Each resolves to null on error.
+      // index) are two independent autocomplete calls; each resolves to null on
+      // error. decideQueryOutcome() combines them: phrases that loaded are shown
+      // even when the product search failed (above the error message).
       var productP = fetchJson(buildAutocompleteUrl(cfg, q, uuid), signal)
         .then(function (body) { return parseAutocompleteResponse(body, cfg.fields); })
         .catch(function () { return null; });
@@ -385,19 +611,19 @@
 
       Promise.all([productP, suggestP]).then(function (res) {
         if (signal && signal.aborted) return; // superseded by a newer keystroke
-        var prod = res[0];
-        if (prod === null) { // product search failed → error state
-          showRecoState(input, { campaign: cfg.noResultsCampaign, message: cfg.errorLabel, heading: cfg.noResultsRecoLabel }, signal);
+        if (guard && !guard()) return;        // term changed / panel dismissed meanwhile
+        var o = decideQueryOutcome(res[0], res[1]);
+        var suggestions = isFinite(cfg.maxSuggestions) ? o.suggestions.slice(0, cfg.maxSuggestions) : o.suggestions;
+        if (o.kind === 'error') { // product search failed → error state, phrases kept
+          var prefix = suggestions.length ? renderDropdown({ suggestions: suggestions, products: [] }, cfg, '') : '';
+          showRecoState(input, { campaign: cfg.noResultsCampaign, message: cfg.errorLabel, heading: cfg.noResultsRecoLabel, prefixHtml: prefix }, signal, guard);
           return;
         }
-        var products = prod.products;
-        var suggestions = res[1] || [];
-        if (isFinite(cfg.maxProducts)) products = products.slice(0, cfg.maxProducts);
-        if (isFinite(cfg.maxSuggestions)) suggestions = suggestions.slice(0, cfg.maxSuggestions);
-        var parsed = { products: products, suggestions: suggestions, correlationId: prod.correlationId };
+        var products = isFinite(cfg.maxProducts) ? o.products.slice(0, cfg.maxProducts) : o.products;
+        var parsed = { products: products, suggestions: suggestions, correlationId: o.correlationId };
         var html = renderDropdown(parsed, cfg, q);
         if (html) { showHtml(input, html, parsed.correlationId); return; }
-        showRecoState(input, { campaign: cfg.noResultsCampaign, message: cfg.noResultsLabel, heading: cfg.noResultsRecoLabel }, signal); // 200 but nothing
+        showRecoState(input, { campaign: cfg.noResultsCampaign, message: cfg.noResultsLabel, heading: cfg.noResultsRecoLabel }, signal, guard); // 200 but nothing
       });
     }
 
@@ -410,38 +636,49 @@
       var ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
       cfg._abort = ac;
       var signal = ac && ac.signal;
+      var token = gate.next();
+      cfg._activeInput = input;
       // Render with the theme's native markup when inside a Horizon-style search
       // modal, so results inherit the theme's styling; our own cards otherwise.
       cfg.skin = !!(input.closest && input.closest('predictive-search-component'));
       var q = input.value.trim();
-      if (!q.length) { showRecoState(input, { campaign: cfg.zeroStateCampaign, message: '', heading: cfg.zeroStateLabel }, signal); return; }
+      // True while this run is still the one allowed to paint the panel.
+      function guard() { return gate.current(token) && cfg._activeInput === input && input.value.trim() === q; }
+      if (!q.length) { showRecoState(input, { campaign: cfg.zeroStateCampaign, message: '', heading: cfg.zeroStateLabel }, signal, guard); return; }
       if (q.length < cfg.minChars) { close(); return; }
-      runQuery(input, q, signal);
+      runQuery(input, q, signal, guard);
     }
 
     var debouncedRun = debounce(run, 300);
 
-    for (var i = 0; i < inputs.length; i++) {
-      (function (input) {
-        input.addEventListener('input', function () { debouncedRun(input); });
-        input.addEventListener('focus', function () { run(input); });
-        input.addEventListener('keydown', function (ev) {
-          if (panel.hidden) return;
-          var opts = panel.querySelectorAll('[role=option]');
-          if (!opts.length) return;
-          var active = panel.querySelector('[role=option].is-active');
-          var idx = -1;
-          for (var k = 0; k < opts.length; k++) { if (opts[k] === active) { idx = k; break; } }
-          if (ev.key === 'ArrowDown') { ev.preventDefault(); idx = (idx + 1) % opts.length; }
-          else if (ev.key === 'ArrowUp') { ev.preventDefault(); idx = (idx <= 0 ? opts.length : idx) - 1; }
-          else if (ev.key === 'Escape') { close(); return; }
-          else if (ev.key === 'Enter') { if (active) { ev.preventDefault(); active.click(); } return; }
-          else return;
-          if (active) active.classList.remove('is-active');
-          opts[idx].classList.add('is-active');
-        });
-      })(inputs[i]);
+    // Idempotent per input (a re-rendered section may hand us the same node again).
+    function bindInputs(scope) {
+      var root = scope && scope.querySelectorAll ? scope : document;
+      var found = root.querySelectorAll(cfg.selector);
+      var bound = 0;
+      for (var i = 0; i < found.length; i++) {
+        if (found[i].__snrSgBound) continue;
+        found[i].__snrSgBound = true;
+        bindInput(found[i]);
+        bound += 1;
+      }
+      neutralizeHorizonWhenReady(root, cfg.selector);   // after binding: only components with a bound input
+      return bound;
     }
+
+    function bindInput(input) {
+      (function (input) {
+        // Invalidate NOW (abort + cancel pending), debounce only the next fetch.
+        input.addEventListener('input', function () { invalidate(); cfg._activeInput = input; debouncedRun(input); });
+        input.addEventListener('focus', function () { invalidate(); run(input); });
+        // Keyboard: handled by the window capture listener (installKeyCapture).
+      })(input);
+    }
+
+    widget = { cfg: cfg, panel: panel, gate: gate, close: close, invalidate: invalidate, run: run, showHtml: showHtml, bindInputs: bindInputs, _consumedKey: null };
+    el.__snrSg = widget;
+    bindInputs(document);
+    installKeyCapture();
 
     // Select by behavior hook (works for both our markup and the theme skin):
     // data-query -> navigate to /search?q=; data-handle -> product page.
@@ -477,19 +714,28 @@
     });
   }
 
-  function initAll() {
+  // `scope` (a re-rendered section in the theme editor) narrows the INPUT lookup
+  // only; the embed root is global (target: body) and always looked up on document.
+  function initAll(scope) {
     var el = document.querySelector('[data-snr-suggestions]');
     if (!el) return;
-    var shared = SNRUtils.getConfig();
-    initBlock(el, shared);
+    if (!el.__snrSg) { initBlock(el, SNRUtils.getConfig()); return; }
+    el.__snrSg.bindInputs(scope && scope.querySelectorAll ? scope : document);
+  }
+
+  // The theme editor re-renders a section's HTML without re-running scripts and
+  // emits shopify:section:load instead; a replaced search input is bound here.
+  function onSectionLoad(event) {
+    initAll(event && event.target);
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { cardAttributes: cardAttributes, buildAutocompleteUrl: buildAutocompleteUrl, buildSuggestionUrl: buildSuggestionUrl, buildRecoUrl: buildRecoUrl, parseAutocompleteResponse: parseAutocompleteResponse, parseSuggestions: parseSuggestions, parseReco: parseReco, highlightMatch: highlightMatch, renderDropdown: renderDropdown, renderNoResults: renderNoResults };
+    module.exports = { cardAttributes: cardAttributes, decideQueryOutcome: decideQueryOutcome, debounce: debounce, createGate: createGate, handleKey: handleKey, neutralizeHorizon: neutralizeHorizon, restoreHorizon: restoreHorizon, setActive: setActive, initBlock: initBlock, initAll: initAll, onSectionLoad: onSectionLoad, buildAutocompleteUrl: buildAutocompleteUrl, buildSuggestionUrl: buildSuggestionUrl, buildRecoUrl: buildRecoUrl, parseAutocompleteResponse: parseAutocompleteResponse, parseSuggestions: parseSuggestions, parseReco: parseReco, highlightMatch: highlightMatch, renderDropdown: renderDropdown, renderNoResults: renderNoResults };
   }
 
   if (typeof document !== 'undefined' && SNRUtils && SNRUtils.getConfig) {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initAll);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { initAll(); });
     else initAll();
+    document.addEventListener('shopify:section:load', onSectionLoad);
   }
 })();

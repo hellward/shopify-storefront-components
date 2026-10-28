@@ -104,15 +104,32 @@ GET {aiApiHost}/search/v2/indices/{suggestion_phrase_index}/autocomplete
 
 ## Behavior notes (shipped embed)
 
-- Debounced input; in-flight calls aborted via `AbortController`.
-- The theme's native predictive-search dropdown is hidden with CSS so the widget owns
-  every state. This is the theme-independent trade-off the embed makes today: it does
-  not stop the theme's own predictive-search request on each keystroke. A theme-owned
-  build should not copy it — replace the native data source instead (see the example
-  below).
-- On **Horizon** (input inside `predictive-search-component`) it renders with the
-  theme's own markup (a "skin"); other themes use the widget's own cards.
-- Keyboard navigation (↑/↓/Enter/Esc) over `[role=option]`.
+- Every keystroke and every dismissal (Escape, outside click) invalidates the
+  current request at once: the in-flight call is aborted, a not-yet-started
+  debounced fetch is cancelled, and a late response for an earlier term or a closed
+  panel is never rendered. Only the next fetch is debounced.
+- On **Horizon** (input inside `predictive-search-component`) the embed renders with
+  the theme's own markup (a "skin") and **stops Horizon's own predictive-search
+  request** per keystroke by replacing the component's `search` handler with a no-op
+  (the original is kept and restored whenever the embed cannot run). The theme's
+  modal, empty state and clear (X) button keep working — the replacement keeps the
+  clear-button toggle that handler used to do; the only native request left is the
+  empty-state fetch when the modal closes. Only a component that contains an input the
+  embed bound is patched. The embed also hides the dropdown
+  with CSS on other themes, where their request still runs — a theme-owned build
+  should replace the native data source instead (see the example below).
+- Other themes use the widget's own cards.
+- While the panel is open the widget **owns the keyboard**: ↑/↓/Enter are handled
+  before any theme handler (a window-level capture listener, keydown and keyup) and
+  move over `[role=option]`; Escape closes the panel and is passed on so the theme can
+  close its modal. Enter with nothing selected is passed on (the theme submits the
+  form).
+- **ARIA**: the panel is the listbox (`role="listbox"`, `id="snr-sg-listbox"`); options
+  get ids and `aria-selected`; while open, the input carries `aria-expanded`,
+  `aria-controls` and `aria-activedescendant`, and gets its original values back on
+  close.
+- A failed product request still shows the phrase suggestions that loaded, above the
+  error message and the no-results recommendations.
 
 ## Example: theme-owned suggestions on Horizon
 

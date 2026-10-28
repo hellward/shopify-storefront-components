@@ -112,9 +112,18 @@ credentials: 'omit'
 - **Empty query** (`?q=` missing) → the interface renders with the empty state (no request is made).
 - **Empty results** → the no-results message; a failed request → "Search is
   temporarily unavailable."
-- **URL state** — `?q`, `?sort`, and `?f.<attr>` (text = comma list, range =
-  `min~max`) are kept in sync via `history.replaceState`, so searches are
-  shareable/back-nav safe.
+- **URL state** — `?q`, `?sort` and the selected filters are kept in sync via
+  `history.replaceState`, so searches are shareable/back-nav safe. Filters are
+  written in a typed form: `fv.<attr>=<value>` repeated once per text value (plain
+  URL-encoding, so commas and tildes in a value are safe) and `fr.<attr>=<min>~<max>`
+  for a numeric range (either side may be empty). The legacy form `f.<attr>` (text =
+  comma list, range = `min~max`) is still read for links shared before, never written;
+  when both forms name the same attribute the typed one wins.
+- **One request at a time** — a newer search (query, sort, filter) aborts the
+  previous one; a response is applied only if it is still the latest. *Load more* is
+  unavailable while any request is pending (so a page load never interrupts a filter
+  or sort change), the page number advances only on success, and on failure the
+  results on screen stay and the button is re-enabled.
 - Product links are **locale/market-aware** (shop route root).
 - **Re-initializes on `shopify:section:load`** (theme editor).
 - HTML-escape every API string.
