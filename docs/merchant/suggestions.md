@@ -34,7 +34,9 @@ a frozen contract.
 URL (flow in the README, *Working with Sidekick*). The contract below gives it the
 connection, requests, responses, events and states; it must own everything else:
 attaching to the search input, rendering, keyboard navigation, request cancellation,
-suppressing or replacing the native predictive search, tracking, and every state.
+replacing the native predictive search's data source (so the theme stops fetching
+Shopify suggestions on every keystroke — hiding its dropdown with CSS is the fallback,
+not the goal), tracking, and every state.
 Work on a duplicate theme, keep the **Synerise** (tracking) embed on — it publishes
 the connection — and switch the **Synerise Suggestions** embed off so the two do not
 compete. The example at the end of this doc is exactly that, done on Horizon.
@@ -103,8 +105,11 @@ GET {aiApiHost}/search/v2/indices/{suggestion_phrase_index}/autocomplete
 ## Behavior notes (shipped embed)
 
 - Debounced input; in-flight calls aborted via `AbortController`.
-- The theme's native predictive-search dropdown is suppressed (render-blocking CSS)
-  so the widget owns every state.
+- The theme's native predictive-search dropdown is hidden with CSS so the widget owns
+  every state. This is the theme-independent trade-off the embed makes today: it does
+  not stop the theme's own predictive-search request on each keystroke. A theme-owned
+  build should not copy it — replace the native data source instead (see the example
+  below).
 - On **Horizon** (input inside `predictive-search-component`) it renders with the
   theme's own markup (a "skin"); other themes use the widget's own cards.
 - Keyboard navigation (↑/↓/Enter/Esc) over `[role=option]`.
