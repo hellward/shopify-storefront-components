@@ -5,7 +5,8 @@ generated or customized with an AI assistant (Shopify Sidekick, or any coding to
 like Cursor / Claude Code), or adapted by hand. **You own the generated code**;
 customization is based on Synerise's **own app-block templates + runtime** (mirrored
 read-only to the public repo
-[`github.com/Synerise/shopify-storefront-components`](https://github.com/Synerise/shopify-storefront-components))
+[`github.com/Synerise/shopify-storefront-components`](https://github.com/Synerise/shopify-storefront-components),
+the canonical source — forks and test mirrors may carry the same files)
 plus a precise **contract** per component, so the integration stays correct.
 
 This is the **customizable alternative** to the Synerise app's built-in storefront
@@ -59,7 +60,7 @@ Same source, two ways:
   > create a theme section based on it, set `campaign_id = <your id>`, apply the
   > four adaptations (copy the runtime into my theme), and customize the
   > PRESENTATION zones to `<your change>`. Keep every `SNR INTEGRATION PLUMBING`
-  > zone unchanged.
+  > zone unchanged, except the required `block.settings` → `section.settings` rename.
 
   Ask for the **files** (the section + the runtime assets) and install them yourself —
   see *Working with Sidekick* below for what the assistant can and cannot do.
@@ -71,15 +72,18 @@ Same source, two ways:
 
 ## Working with Sidekick (and other AI assistants)
 
-Verified on a Horizon theme, October 2026. Two different Shopify features look alike
-but behave very differently:
+For this multi-file integration, ask **Sidekick chat** to read the public sources and
+give you complete downloadable files, then install them through *Edit code*. Do not
+rely on the theme editor's **"Generate block"** to install a section and its runtime
+assets. Sidekick's direct-editing capabilities vary by editing surface and change over
+time; what follows is what worked in October 2026 on a Horizon theme.
 
 | | **Sidekick chat** (the panel in the admin / theme editor) | **"Generate block"** (theme editor → Add block → AI) |
 |---|---|---|
-| Reads our public URLs (template, contract, runtime) | **Yes** | No — it only sees the text you type |
-| Can write files into your theme | **No** — it hands you files to download | Yes, but only **one standalone theme block** in `blocks/` |
-| Can create a section or upload assets | No | No |
-| Result for our components | The correct section + assets, ready to install | A look-alike stub with **no runtime** — nothing loads |
+| Reads our public URLs (template, contract, runtime) | Yes | Not in our runs — it worked from the prompt text only |
+| Writes files into your theme | Hands you files to download | One standalone theme block in `blocks/` |
+| Creates a section or uploads assets | No | No |
+| Result for our components | The section + assets, ready to install | A look-alike block without the runtime — nothing loaded |
 
 **The flow that works**
 
@@ -88,21 +92,24 @@ but behave very differently:
 2. If Sidekick offers to "generate this theme block", **decline** and ask instead:
    *"Give me the complete section file and the asset files to download."*
 3. Download the files (one `.liquid` for `sections/`, two or three for `assets/`).
-4. **Online Store → Themes → Edit code**: *Assets → Add a new asset* for each runtime /
-   CSS file (keep the filenames), then *Sections → Add a new section*, paste the
-   `.liquid`, save.
-5. Theme editor → *Add section* → pick the component, set the id if not pre-filled.
+4. Confirm which theme you are about to edit — check its name and ID in the Themes
+   list — and prefer a duplicate of your live theme for the first install.
+5. **Online Store → Themes → Edit code**: *Assets → Add a new asset* for each runtime /
+   CSS file (keep the filenames). If a file with the same name already exists (for
+   example `snr-utils.js` from another Synerise component), compare the two before
+   overwriting it. Then *Sections → Add a new section*, paste the `.liquid`, save.
+6. Theme editor → *Add section* → pick the component, set the id if not pre-filled.
 
 After that the code is yours: edit `buildCard()` in your copy of `snr-utils.js`, the
 `<style>` block or the schema at any time; the PRESENTATION / PLUMBING markers show you
 where. `snr-utils.js` is shared by Recommendations and Search — scope card changes to
 one component's root class (e.g. `.snr-recommendations .snr-card__badge`) if you use both.
 
-**Why "Generate block" cannot do this.** It creates a single self-contained theme block
-from your description alone; it never receives fetched content and cannot touch
-`sections/` or `assets/`. Our components need the runtime files, so the generated block
-renders an empty frame. If you tried it, delete the generated block
-(`blocks/ai_gen_*.liquid`) from the theme.
+**Why "Generate block" is the wrong tool here.** It produces a single self-contained
+theme block and cannot add files to `sections/` or `assets/`. Our components need the
+runtime files, so in our runs the generated block rendered an empty frame. If you tried
+it, remove the failed block instance from the template in the theme editor, and delete
+its file (`blocks/ai_gen_*.liquid`) only after confirming no other template uses it.
 
 ## The two zones (how customization stays safe)
 
@@ -121,7 +128,8 @@ next marker (a file may switch zones several times):
 - **Integration plumbing — do NOT change:** the API call + auth, `clientUUID`, the
   view/click events, hide-on-empty, HTML escaping, the root element's `data-*`
   attributes, the hook classes and the script tags. Changing these breaks the
-  integration or analytics.
+  integration or analytics. The one sanctioned edit inside plumbing is the
+  `block.settings` → `section.settings` rename the contracts require.
 - **Presentation — change freely:** the styles, the wrapper/heading markup, the
   layout, the schema labels/defaults, the `attr_*` field mapping (which attributes
   you render), and — when the runtime is copied into your theme — the card markup
@@ -147,9 +155,11 @@ market price conversion).
 
 ## Troubleshooting
 
-- **The component doesn't appear.** It hides itself on purpose when the tracking
-  embed/config is missing, the campaign/index id is wrong, or there are no results.
-  Check that `window.__snrs.config` exists on the page and the id is valid.
+- **The component doesn't appear.** It hides itself on purpose (Recommendations and
+  Search) when the tracking embed/config is missing, the campaign/index id is wrong,
+  or there are no results. Check that `window.__snrs.config` exists on the page and
+  the id is valid. Suggestions behaves differently: it shows error and no-results
+  states, listed in its contract.
 - **Cards show with no image or price.** The `attr_*` field mapping (settings
   `attr_handle`, `attr_title`, `attr_image`, `attr_price`) doesn't match what your
   campaign/index returns. Fix the attribute names and/or set them as
