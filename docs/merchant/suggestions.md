@@ -53,8 +53,10 @@ GET {aiApiHost}/search/v2/indices/{suggestion_phrase_index}/autocomplete
 
 ## Responses
 
-- **Products:** `data[]` — items with `handle`, `imageLink`, `title`,
-  `price.value` (major units); `extras.correlationId`.
+- **Products:** `data[]` — items with `itemId`, `handle`, `imageLink`, `title`,
+  `price.value` (major units, formatted with the shop's `shop.money_format`);
+  `extras.correlationId`. `itemId` is always returned; the other fields are the
+  requested `displayAttributes`.
 - **Phrases:** `data[].suggestion` — the suggested phrase string (tolerating a bare
   string or a `{ suggestion | text | query }` object per entry); no display
   attributes.
@@ -62,7 +64,8 @@ GET {aiApiHost}/search/v2/indices/{suggestion_phrase_index}/autocomplete
 ## Events
 
 - **Product card click** → `itemSearchClick({ item, correlationId, searchType: 'autocomplete' })`
-  (needs `window.SR` + `correlationId`), then navigate to the product.
+  where `item` is the product's `itemId` string from the response (not the product
+  object; needs `window.SR` + `correlationId`), then navigate to the product.
 - **Suggestion phrase click** → navigate to `/search?q=<phrase>` (and the
   "View all results" link → `/search?q=<term>`).
 - **Zero-state / no-results recommendation cards** carry no `correlationId`, so they
