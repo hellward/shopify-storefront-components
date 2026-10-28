@@ -121,9 +121,10 @@ The mirrored file is an **app block**. Your copy is a **theme section**. Make ex
      in the Liquid — it is `buildCard()` in `snr-utils.js`** (its PRESENTATION zone). Anything
      about the card itself (a badge, a second price, a rating) is a change to your copy of
      that file; this is why copy-into-theme is the default route.
-   - **Load from the mirror (restyle only, auto-updating):** replace each `asset_url`
-     tag with the mirror's pinned URL (`https://cdn.jsdelivr.net/gh/Synerise/shopify-storefront-components@<tag>/extensions/synerise/assets/<file>`).
-     The runtime is then read-only; customize the Liquid, `<style>`, schema and `attr_*` mapping.
+   - **Load from the mirror (restyle only, pinned to a release tag):** replace each
+     `asset_url` tag with the mirror's pinned URL (`https://cdn.jsdelivr.net/gh/Synerise/shopify-storefront-components@<tag>/extensions/synerise/assets/<file>`).
+     The runtime is then read-only and stays at that tag until you change it;
+     customize the Liquid, `<style>`, schema and `attr_*` mapping.
 4. Nothing else — the `data-*` attributes, hook classes and script order are plumbing.
 
 The **Campaign ID is a schema setting** (per instance); do not hard-code it.
