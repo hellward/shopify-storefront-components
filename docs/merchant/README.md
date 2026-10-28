@@ -20,11 +20,13 @@ For standard, no-code use, enable the app's built-in blocks instead.
 | **Search** | AI Search results page (grid, facets, sort, pagination) | Contract + our mirrored **app-block template** — [search-results.md](search-results.md) |
 | **Suggestions** | Search autocomplete under the theme's search box | **Contract only** — [suggestions.md](suggestions.md) (see its note) |
 
-> **Suggestions is contract-only.** It is a global app embed that takes over the
+> **Suggestions has no template.** It is a global app embed that takes over the
 > theme's native search dropdown — too theme-coupled to hand over as a copy-&-paste
-> block. Use the shipped Synerise Suggestions app embed; the contract is here for
-> reference. Deep visual customization is the job of the Synerise component
-> configurator (coming later).
+> block. Default: use the shipped Synerise Suggestions app embed. For structural
+> customization, build a theme-owned alternative from the contract with an AI
+> assistant — [suggestions.md](suggestions.md) lists the three routes and a worked
+> Horizon example. Deep visual customization without theme code is the job of the
+> Synerise component configurator (coming later).
 
 ## Prerequisites (once)
 
