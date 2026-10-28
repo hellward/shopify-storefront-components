@@ -353,9 +353,17 @@
       '</div>';
   }
 
+  // SNRUtils.toNumber with a fallback for an older customized snr-utils.js copy.
+  function numberOf(value) {
+    if (typeof SNRUtils.toNumber === 'function') return SNRUtils.toNumber(value);
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string' && value.trim() !== '') return Number(value);
+    return NaN;
+  }
+
   function facetValueLi(state, facetName, val) {
     var sel = state.filters[facetName];
-    var count = SNRUtils.toNumber(val.count);   // API value: render only a real number
+    var count = numberOf(val.count);   // API value: render only a real number
     var selected = !!(sel && sel.type === 'text' && sel.values.indexOf(val.value) !== -1);
     return '<li class="snr-facet__item">' +
       '<label class="snr-facet__label">' +

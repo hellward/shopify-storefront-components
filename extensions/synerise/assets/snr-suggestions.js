@@ -3,6 +3,15 @@
     (typeof require !== 'undefined' ? require('./snr-utils.js') : {});
 
   // Root segment of each mapped field path, de-duped (same as recommendations.js).
+  // SNRUtils.toNumber with a fallback for an older customized snr-utils.js copy
+  // (the three asset files are released together, but a merchant may lag).
+  function numberOf(value) {
+    if (typeof SNRUtils.toNumber === 'function') return SNRUtils.toNumber(value);
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string' && value.trim() !== '') return Number(value);
+    return NaN;
+  }
+
   function cardAttributes(fields) {
     fields = fields || {};
     var out = [];
@@ -142,7 +151,7 @@
       if (cfg.skin) {
         var title = SNRUtils.getPath(p, fields.title || 'title') || handle || '';
         var image = SNRUtils.getPath(p, fields.image || 'imageLink');
-        var priceNum = SNRUtils.toNumber(SNRUtils.getPath(p, fields.price || 'price.value'));   // null/'' → NaN → no price
+        var priceNum = numberOf(SNRUtils.getPath(p, fields.price || 'price.value'));   // null/'' → NaN → no price
         var price = isFinite(priceNum) ? SNRUtils.formatMoney(priceNum, cfg.moneyFormat) : '';
         parts.push('<li class="predictive-search-results__card predictive-search-results__card--product" ' + hooks + '>' +
           '<div class="resource-card" data-resource-type="product">' +
@@ -355,11 +364,13 @@
   // when the event was consumed.
   function handleKey(widget, ev) {
     if (!widget || !ev || !ev.target || !ev.target.__snrSgBound) return false;
-    var panel = widget.panel;
-    if (!panel || panel.hidden) return false;
     if (ev.isComposing || ev.altKey || ev.ctrlKey || ev.metaKey) return false;   // IME / shortcuts belong to the page
     var key = ev.key;
-    if (ev.type === 'keydown' && key === 'Escape') { widget.close(); return false; }   // also for option-less panels
+    // Escape dismisses even while the panel is still hidden: a request may be
+    // pending for the first term, and its response must not open the panel later.
+    if (ev.type === 'keydown' && key === 'Escape') { widget.close(); return false; }
+    var panel = widget.panel;
+    if (!panel || panel.hidden) return false;
     var opts = panel.querySelectorAll('[role=option]');
     if (!opts.length) return false;
     if (ev.type === 'keyup') {
@@ -546,7 +557,8 @@
       invalidate();
       panel.hidden = true;
       panel.innerHTML = '';
-      closeAria(cfg._activeInput);
+      closeAria(cfg._ariaInput);
+      cfg._ariaInput = null;
       if (widget) widget._consumedKey = null;
     }
 
@@ -562,7 +574,10 @@
       panel._correlationId = correlationId || '';
       positionPanel(panel, input);
       panel.hidden = false;
-      if (cfg._activeInput && cfg._activeInput !== input) closeAria(cfg._activeInput);   // panel moved to another input
+      // _ariaInput = the input whose ARIA we modified (distinct from _activeInput,
+      // which the input handler moves before we get here).
+      if (cfg._ariaInput && cfg._ariaInput !== input) closeAria(cfg._ariaInput);
+      cfg._ariaInput = input;
       cfg._activeInput = input;
       openAria(widget, input);
     }
@@ -702,7 +717,8 @@
     });
 
     document.addEventListener('mousedown', function (ev) {
-      if (!panel.hidden && !panel.contains(ev.target) && !(ev.target.closest && ev.target.closest(cfg.selector))) close();
+      // Outside click dismisses pending work too (panel hidden, request in flight).
+      if (!panel.contains(ev.target) && !(ev.target.closest && ev.target.closest(cfg.selector))) close();
     });
   }
 
