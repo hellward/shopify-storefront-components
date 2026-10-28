@@ -98,10 +98,11 @@ time; what follows is what worked in October 2026 on a Horizon theme.
    CSS file (keep the filenames). If a file with the same name already exists (for
    example `snr-utils.js` from another Synerise component), compare the two before
    overwriting it. The runtime files are released **together**: `snr-utils.js` and the
-   component runtimes (`recommendations.js`, `snr-search-page.js`) from one release
-   tag belong with each other, so when you upgrade one, upload the matching others
-   from the same tag — after comparing them with your copies to carry over your
-   customizations. Then *Sections → Add a new section*, paste the `.liquid`, save.
+   component runtimes you copy (`recommendations.js`, `snr-search-page.js`) from one
+   release tag belong with each other, so when you upgrade one, upload the matching
+   others from the same tag — after comparing them with your copies to carry over
+   your customizations. (The Suggestions runtime, `snr-suggestions.js`, ships inside
+   the app embed and updates with the app; you never upload it.) Then *Sections → Add a new section*, paste the `.liquid`, save.
 6. Theme editor → *Add section* → pick the component, set the id if not pre-filled.
 
 After that the code is yours: edit `buildCard()` in your copy of `snr-utils.js`, the
