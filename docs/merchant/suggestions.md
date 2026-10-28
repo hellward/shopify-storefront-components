@@ -1,23 +1,25 @@
 # Synerise Suggestions (Autocomplete) — Integration Contract
 
-**Internal source doc.** Unlike recommendations and search, this is a
-**contract-only** doc — there is **no copy-&-customize reference block**.
+Unlike recommendations and search, this is a **contract-only** doc — there is
+**no copy-&-customize template**.
 
-**Why no reference block:** Suggestions is not a section a merchant places; it is a
-global **app embed** that attaches to the theme's existing search input and **takes
-over** the native predictive-search dropdown. Its runtime (~23 KB) is heavily
-theme-coupled (native-takeover + Horizon skin + keyboard + modal + zero/no-results
-states), and cross-theme robustness is an open problem
-(`docs/search-suggestions-theme-support-followup.md`). A hand-maintained
-self-contained copy would be large, fragile, and strictly worse than the shipped
-embed.
+**Why no template:** Suggestions is not a section a merchant places; it is a global
+**app embed** that attaches to the theme's existing search input and **takes over**
+the native predictive-search dropdown. Its runtime (~23 KB) is tightly coupled to the
+theme (native takeover, theme skin, keyboard, modal, zero/no-results states), and it
+is still being hardened across themes. A hand-maintained self-contained copy would be
+large, fragile, and strictly worse than the shipped embed.
 
 **So, to use suggestions:**
-- **Enable the shipped Synerise Suggestions app embed** (the robust, supported
-  path) and configure it — see `docs/components/suggestions.md`.
-- **For deep dropdown customization**, that is the job of the **Synerise component
-  configurator** (`shopify-components-editor`), whose roadmapped *autocomplete*
-  kind is designed for exactly this.
+- **Enable the shipped Synerise Suggestions app embed** (the supported path): theme
+  editor → *App embeds* → **Synerise Suggestions** → on; paste your **product search
+  index (UUID)** (the same index as [Search Results](search-results.md)); optionally
+  a query-suggestion index and the zero-state / no-results recommendation campaigns;
+  save.
+- **For deep dropdown customization**, Synerise is building a visual component
+  configurator with an autocomplete kind designed for exactly this. Until then, the
+  embed's settings (labels, limits, field mapping, search-input selector) are the
+  customization surface.
 
 This doc specifies the **API contract** so an assistant (or we) can reason about
 suggestions and keep parity with recommendations/search.
